@@ -19,7 +19,6 @@ jobs:
 
       - uses: mamba-org/setup-micromamba@v1
         with:
-          micromamba-version: '1.7.0'
           environment-file: environment.yml
           init-shell: bash
           cache-environment: true
@@ -39,7 +38,6 @@ jobs:
 
       - uses: mamba-org/setup-micromamba@v1
         with:
-          micromamba-version: '1.7.0'
           environment-file: environment.yml
           init-shell: bash
           cache-environment: true
@@ -58,7 +56,6 @@ jobs:
 
       - uses: mamba-org/setup-micromamba@v1
         with:
-          micromamba-version: '1.7.0'
           environment-file: environment.yml
           init-shell: bash
           cache-environment: true
