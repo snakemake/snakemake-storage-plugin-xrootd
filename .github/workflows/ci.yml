@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+defaults:
+  run:
+    shell: bash -leo pipefail {0} {0}
+
+jobs:
+  formatting:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v3
+
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          micromamba-version: '1.7.0'
+          environment-file: environment.yml
+          init-shell: bash
+          cache-environment: true
+          post-cleanup: 'all'
+
+      - name: Install Dependencies using Poetry
+        run: poetry install
+
+      - name: Check formatting
+        run: poetry run black --check .
+
+  linting:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v3
+
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          micromamba-version: '1.7.0'
+          environment-file: environment.yml
+          init-shell: bash
+          cache-environment: true
+          post-cleanup: 'all'
+
+      - name: Install Dependencies using Poetry
+        run: poetry install
+
+      - name: Check code
+        run: poetry run flake8
+
+  testing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          micromamba-version: '1.7.0'
+          environment-file: environment.yml
+          init-shell: bash
+          cache-environment: true
+          post-cleanup: 'all'
+
+      - name: Install dependencies
+        run: poetry install
+
+      - name: Setup XrootD
+        run: |
+          sudo docker run --rm --privileged -p 32294:32294 -p 31113:31113 cloudpg/xrootd-proxy --config /etc/xrootd/xrd_test.conf
+
+      - name: Run pytest
+        run: poetry run coverage run -m pytest tests/tests.py
+
+      - name: Run Coverage
+        run: poetry run coverage report -m

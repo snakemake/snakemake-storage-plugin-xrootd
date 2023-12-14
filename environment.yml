@@ -1,0 +1,7 @@
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - xrootd
+  - python =3.11
+  - poetry
