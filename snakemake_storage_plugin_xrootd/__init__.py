@@ -66,7 +66,7 @@ class StorageProviderSettings(StorageProviderSettingsBase):
         },
     )
     query_params: Mapping[str, str] = field(
-        default=dict(),
+        default_factory=dict,
         metadata={
             "help": "Optional query parameters for XRootD (e.g. xrd.wantprot=unix, "
             "authz=XXXXXX)",
