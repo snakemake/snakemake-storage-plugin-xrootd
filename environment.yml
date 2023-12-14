@@ -1,3 +1,4 @@
+name: snakemake-storage-plugin-xrootd-dev
 channels:
   - conda-forge
   - nodefaults
