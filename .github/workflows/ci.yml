@@ -66,7 +66,7 @@ jobs:
 
       - name: Setup XrootD
         run: |
-          sudo docker run --rm --privileged -p 32294:32294 -p 31113:31113 cloudpg/xrootd-proxy --config /etc/xrootd/xrd_test.conf
+          sudo docker run -d --rm --privileged -p 32294:32294 -p 31113:31113 cloudpg/xrootd-proxy --config /etc/xrootd/xrd_test.conf
 
       - name: Run pytest
         run: poetry run coverage run -m pytest tests/tests.py
