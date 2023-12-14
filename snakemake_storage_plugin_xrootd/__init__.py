@@ -35,6 +35,7 @@ def unparse_query_params(query_params: Mapping[str, str]):
 @dataclass
 class StorageProviderSettings(StorageProviderSettingsBase):
     host: Optional[str] = field(
+        default=None,
         metadata={
             "help": "The XrootD host to connect to",
             "env_var": False,
