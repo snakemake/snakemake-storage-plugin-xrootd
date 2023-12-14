@@ -222,18 +222,27 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
     @retry_decorator
     def exists(self) -> bool:
         # return True if the object exists
-        return self.provider.file_client.exists(self.url)
+        status, _ = self.provider.filesystem_client.stat(self.path)
+        if status.errno == 3011:
+            return False
+        if not status.ok:
+            raise IOError(f"Error checking existence of {self.url}: {status.message}")
+        return True
 
     @retry_decorator
     def mtime(self) -> float:
         # return the modification time
-        _, stat = self.provider.filesystem_client.stat(self.path)
+        status, stat = self.provider.filesystem_client.stat(self.path)
+        if not status.ok:
+            raise IOError(f"Error checking existence of {self.url}: {status.message}")
         return stat.modtime
 
     @retry_decorator
     def size(self) -> int:
         # return the size in bytes
-        _, stat = self.provider.filesystem_client.stat(self.path)
+        status, stat = self.provider.filesystem_client.stat(self.path)
+        if not status.ok:
+            raise IOError(f"Error checking existence of {self.url}: {status.message}")
         return stat.size
 
     @retry_decorator
