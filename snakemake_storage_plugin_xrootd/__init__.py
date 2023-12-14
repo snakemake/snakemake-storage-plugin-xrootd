@@ -272,7 +272,7 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
         # self.local_path().
         def mkdir(path):
             if path != ".":
-                self.filesystem_client.mkdir(
+                self.provider.filesystem_client.mkdir(
                     path + "/", flags=client.flags.MkDirFlags.MAKEPATH
                 )
 
