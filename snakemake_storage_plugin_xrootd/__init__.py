@@ -122,7 +122,7 @@ class StorageProvider(StorageProviderBase):
                 description="A file on an XrootD instance. Note that we omit the host "
                 "name from the query as that is given via the settings of the storage "
                 "provider.",
-                query_type=QueryType.ANY,
+                type=QueryType.ANY,
             )
         ]
 
@@ -182,11 +182,11 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
         # Alternatively, you can e.g. prepare a connection to your storage backend here.
         # and set additional attributes.
         self.parsed = urlparse(self.query)
-        self.path = f"{self.parsed.netloc}{self.parsed.path}"
+        self.path = f"/{self.parsed.netloc}{self.parsed.path}"
         self.url = self._get_url(self.path)
 
     def _get_url(self, path):
-        return f"root://{self.provider.netloc}//{path}{self.provider.query_params}"
+        return f"root://{self.provider.netloc}/{path}{self.provider.query_params}"
 
     async def inventory(self, cache: IOCacheStorageInterface):
         """From this file, try to find as much existence and modification date
