@@ -281,9 +281,11 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
         # self.local_path().
         def mkdir(path):
             if path != ".":
-                self.provider.filesystem_client.mkdir(
+                status, _ = self.provider.filesystem_client.mkdir(
                     path + "/", flags=client.flags.MkDirFlags.MAKEPATH
                 )
+                if not status.ok:
+                    raise IOError(f"Error creating directory {path}: {status.message}")
 
         process = client.CopyProcess()
         if self.local_path().is_dir():
