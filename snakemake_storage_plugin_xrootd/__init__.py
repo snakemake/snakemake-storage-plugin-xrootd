@@ -100,14 +100,14 @@ class StorageProvider(StorageProviderBase):
         # and set additional attributes.
 
         userpass = ""
-        if self.provider.settings.username:
+        if self.settings.username:
             userpass += self.provider.settings.username
-        if self.provider.settings.password:
-            userpass += f":{self.provider.settings.password}"
+        if self.settings.password:
+            userpass += f":{self.settings.password}"
         if userpass:
             userpass += "@"
         port = f":{self.settings.port}" if self.settings.port else ""
-        self.netloc = f"{userpass}{self.provider.settings.host}{port}"
+        self.netloc = f"{userpass}{self.settings.host}{port}"
 
         self.filesystem_client = client.FileSystem(f"root://{self.netloc}")
         self.file_client = client.File()
