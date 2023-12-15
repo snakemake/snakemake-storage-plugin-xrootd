@@ -223,7 +223,7 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
     def exists(self) -> bool:
         # return True if the object exists
         status, _ = self.provider.filesystem_client.stat(self.path)
-        if status.errno == 3011:
+        if status.errno == 3011 or status.errno == 3005:
             return False
         if not status.ok:
             raise IOError(f"Error checking existence of {self.url}: {status.message}")
