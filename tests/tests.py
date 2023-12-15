@@ -15,7 +15,7 @@ class TestStorage(TestStorageBase):
     def get_query(self, tmp_path) -> str:
         # Return a query. If retrieve_only is True, this should be a query that
         # is present in the storage, as it will not be created.
-        return "root://foo/test.txt"
+        return "root://test.txt"
 
     def get_query_not_existing(self, tmp_path) -> str:
         return "root://foo/test_not_existing.txt"
