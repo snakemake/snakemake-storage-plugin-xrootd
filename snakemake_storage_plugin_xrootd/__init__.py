@@ -221,12 +221,16 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
     # provided by snakemake-interface-storage-plugins.
     @retry_decorator
     def exists(self) -> bool:
-        # return True if the object exists
-        status, _ = self.provider.filesystem_client.stat(self.path)
+        return self._exists(self.path)
+
+    def _exists(self, path) -> bool:
+        status, _ = self.provider.filesystem_client.stat(path)
         if status.errno == 3011 or status.errno == 3005:
             return False
         if not status.ok:
-            raise IOError(f"Error checking existence of {self.url}: {status.message}")
+            raise IOError(
+                f"Error checking existence of {path} on XRootD: {status.message}"
+            )
         return True
 
     @retry_decorator
@@ -280,7 +284,7 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
         # Ensure that the object is stored at the location specified by
         # self.local_path().
         def mkdir(path):
-            if path != ".":
+            if path != "." and path != "/" and not self._exists(path):
                 status, _ = self.provider.filesystem_client.mkdir(
                     path + "/", flags=client.flags.MkDirFlags.MAKEPATH
                 )
