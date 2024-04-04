@@ -96,7 +96,7 @@ jobs:
           eval "$(micromamba shell hook --shell bash)"
           micromamba create -n xrootd -c conda-forge xrootd
           micromamba activate xrootd
-          xrootd -p 32294 /tmp &
+          xrootd -p 32294 &
           sleep 10
           micromamba deactivate
 
