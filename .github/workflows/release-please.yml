@@ -24,12 +24,20 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: mamba-org/setup-micromamba@v1
+      - uses: actions/setup-python@v4
         with:
-          environment-file: environment.yml
-          init-shell: bash
-          cache-environment: true
-          post-cleanup: 'all'
+          python-version: "3.12"
+
+      - name: Install poetry
+        run: pip install poetry
+
+      - name: Determine dependencies
+        run: poetry lock
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+          cache: poetry
 
       - name: Install Dependencies using Poetry
         run: poetry install
