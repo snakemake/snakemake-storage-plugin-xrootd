@@ -88,9 +88,6 @@ jobs:
       - name: Install dependencies
         run: poetry install
 
-      - name: data dir
-        run: mkdir xrootd-data
-
       - name: Setup XrootD
         #uses: JarvusInnovations/background-action@v1
         #with:
@@ -99,7 +96,7 @@ jobs:
           eval "$(micromamba shell hook --shell bash)"
           micromamba create -n xrootd -c conda-forge xrootd
           micromamba activate xrootd
-          xrootd -p 32294 xrootd-data &
+          xrootd -p 32294 /tmp &
           sleep 10
           micromamba deactivate
 

@@ -15,10 +15,10 @@ class TestStorage(TestStorageBase):
     def get_query(self, tmp_path) -> str:
         # Return a query. If retrieve_only is True, this should be a query that
         # is present in the storage, as it will not be created.
-        return "root://test.txt"
+        return "root://tmp/test.txt"
 
     def get_query_not_existing(self, tmp_path) -> str:
-        return "root://foo/test_not_existing.txt"
+        return "root://tmp/test_not_existing.txt"
 
     def get_storage_provider_cls(self) -> Type[StorageProviderBase]:
         # Return the StorageProvider class of this plugin
