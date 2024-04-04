@@ -225,7 +225,7 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
 
     def _exists(self, path) -> bool:
         status, _ = self.provider.filesystem_client.stat(path)
-        if status.errno == 3011 or status.errno == 3005:
+        if status.errno == 3011 or status.errno == 3005 or status.errno == 3010:
             return False
         if not status.ok:
             raise IOError(

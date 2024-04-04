@@ -17,12 +17,20 @@ jobs:
       - name: Check out the code
         uses: actions/checkout@v3
 
-      - uses: mamba-org/setup-micromamba@v1
+      - uses: actions/setup-python@v4
         with:
-          environment-file: environment.yml
-          init-shell: bash
-          cache-environment: true
-          post-cleanup: 'all'
+          python-version: "3.12"
+
+      - name: Install poetry
+        run: pip install poetry
+
+      - name: Determine dependencies
+        run: poetry lock
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+          cache: poetry
 
       - name: Install Dependencies using Poetry
         run: poetry install
@@ -36,12 +44,20 @@ jobs:
       - name: Check out the code
         uses: actions/checkout@v3
 
-      - uses: mamba-org/setup-micromamba@v1
+      - uses: actions/setup-python@v4
         with:
-          environment-file: environment.yml
-          init-shell: bash
-          cache-environment: true
-          post-cleanup: 'all'
+          python-version: "3.12"
+
+      - name: Install poetry
+        run: pip install poetry
+
+      - name: Determine dependencies
+        run: poetry lock
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+          cache: poetry
 
       - name: Install Dependencies using Poetry
         run: poetry install
@@ -54,23 +70,38 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: mamba-org/setup-micromamba@v1
+      - uses: actions/setup-python@v4
         with:
-          environment-file: environment.yml
-          init-shell: bash
-          cache-environment: true
-          post-cleanup: 'all'
+          python-version: "3.12"
+
+      - name: Install poetry
+        run: pip install poetry
+
+      - name: Determine dependencies
+        run: poetry lock
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+          cache: poetry
 
       - name: Install dependencies
         run: poetry install
 
       - name: Setup XrootD
+        #uses: JarvusInnovations/background-action@v1
+        #with:
         run: |
-          mkdir data
-          sudo docker run -d --rm --privileged -p 32294:32294 -p 31113:31113 -v $PWD/data:/data/xrd cloudpg/xrootd-proxy --config /etc/xrootd/xrd_test.conf
+          "${SHELL}" <(curl -L micro.mamba.pm/install.sh)
+          eval "$(micromamba shell hook --shell bash)"
+          micromamba create -n xrootd -c conda-forge xrootd
+          micromamba activate xrootd
+          xrootd -p 32294 &
+          sleep 10
+          micromamba deactivate
 
       - name: Run pytest
-        run: poetry run coverage run -m pytest tests/tests.py
+        run: poetry run coverage run -m pytest tests/tests.py -v
 
       - name: Run Coverage
         run: poetry run coverage report -m

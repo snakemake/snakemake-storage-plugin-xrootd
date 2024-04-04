@@ -4,5 +4,5 @@ channels:
   - nodefaults
 dependencies:
   - xrootd
-  - python =3.11
+  - python =3.12
   - poetry
