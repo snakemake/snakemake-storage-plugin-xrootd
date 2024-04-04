@@ -17,12 +17,20 @@ jobs:
       - name: Check out the code
         uses: actions/checkout@v3
 
-      - uses: mamba-org/setup-micromamba@v1
+      - uses: actions/setup-python@v4
         with:
-          environment-file: environment.yml
-          init-shell: bash
-          cache-environment: true
-          post-cleanup: 'all'
+          python-version: "3.12"
+
+      - name: Install poetry
+        run: pip install poetry
+
+      - name: Determine dependencies
+        run: poetry lock
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+          cache: poetry
 
       - name: Install Dependencies using Poetry
         run: poetry install
@@ -36,12 +44,20 @@ jobs:
       - name: Check out the code
         uses: actions/checkout@v3
 
-      - uses: mamba-org/setup-micromamba@v1
+      - uses: actions/setup-python@v4
         with:
-          environment-file: environment.yml
-          init-shell: bash
-          cache-environment: true
-          post-cleanup: 'all'
+          python-version: "3.12"
+
+      - name: Install poetry
+        run: pip install poetry
+
+      - name: Determine dependencies
+        run: poetry lock
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+          cache: poetry
 
       - name: Install Dependencies using Poetry
         run: poetry install
@@ -54,12 +70,20 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: mamba-org/setup-micromamba@v1
+      - uses: actions/setup-python@v4
         with:
-          environment-file: environment.yml
-          init-shell: bash
-          cache-environment: true
-          post-cleanup: 'all'
+          python-version: "3.12"
+
+      - name: Install poetry
+        run: pip install poetry
+
+      - name: Determine dependencies
+        run: poetry lock
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+          cache: poetry
 
       - name: Install dependencies
         run: poetry install
@@ -72,6 +96,7 @@ jobs:
         with:
           run: xrootd -p 32294 xrootd-data
           wait-for: 10s
+          wait-on: http://localhost:32294
 
       - name: Run pytest
         run: poetry run coverage run -m pytest tests/tests.py
