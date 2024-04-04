@@ -95,11 +95,12 @@ jobs:
         #uses: JarvusInnovations/background-action@v1
         #with:
         run: |
-          pip install xrootd
+          "${SHELL}" <(curl -L micro.mamba.pm/install.sh)
+          micromamba create -n xrootd -c conda-forge xrootd
+          micromamba activate xrootd
           xrootd -p 32294 xrootd-data &
           sleep 10
-          # wait-for: 10s
-          # wait-on: http://localhost:32294
+          micromamba deactivate
 
       - name: Run pytest
         run: poetry run coverage run -m pytest tests/tests.py -v
