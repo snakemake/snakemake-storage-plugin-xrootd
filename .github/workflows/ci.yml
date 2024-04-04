@@ -64,10 +64,14 @@ jobs:
       - name: Install dependencies
         run: poetry install
 
+      - name: data dir
+        run: mkdir xrootd-data
+
       - name: Setup XrootD
-        run: |
-          mkdir xrootd-data
-          xrootd -p 32294 xrootd-data
+        uses: JarvusInnovations/background-action@v1
+        with:
+          run: xrootd -p 32294 xrootd-data
+          wait-for: 10s
 
       - name: Run pytest
         run: poetry run coverage run -m pytest tests/tests.py
