@@ -5,13 +5,13 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry]
 name = "snakemake-storage-plugin-xrootd"
 version = "0.1.1"
-description = ""
+description = "A Snakemake storage plugin for xrootd storage"
 authors = [
     "Chris Burr <christopher.burr@cern.ch>",
     "Johannes Koester <johannes.koester@uni-due.de>"
 ]
 readme = "README.md"
-repository = "https://github.com/your/plugin"
+repository = "https://github.com/snakemake/snakemake-storage-plugin-xrootd"
 documentation = "https://snakemake.github.io/snakemake-plugin-catalog/plugins/storage/xrootd.html"
 
 [tool.poetry.dependencies]
