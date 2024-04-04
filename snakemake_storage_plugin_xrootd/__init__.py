@@ -186,7 +186,7 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
         self.url = self._get_url(self.path)
 
     def _get_url(self, path):
-        return f"root://{self.provider.netloc}/{path}{self.provider.query_params}"
+        return f"root://{self.provider.netloc}{path}{self.provider.query_params}"
 
     async def inventory(self, cache: IOCacheStorageInterface):
         """From this file, try to find as much existence and modification date
