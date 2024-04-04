@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.1.1...v0.1.2) (2024-04-04)
+
+
+### Documentation
+
+* add description and metadata ([dd6b31b](https://github.com/snakemake/snakemake-storage-plugin-xrootd/commit/dd6b31b99117307f52646848c3e8315ce3d24b88))
+
 ## [0.1.1](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.1.0...v0.1.1) (2024-04-04)
 
 
