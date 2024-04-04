@@ -95,7 +95,8 @@ jobs:
         #uses: JarvusInnovations/background-action@v1
         #with:
         run: |
-          poetry run xrootd -p 32294 xrootd-data &
+          pip install xrootd
+          xrootd -p 32294 xrootd-data &
           sleep 10
           # wait-for: 10s
           # wait-on: http://localhost:32294
