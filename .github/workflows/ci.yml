@@ -96,6 +96,7 @@ jobs:
         #with:
         run: |
           "${SHELL}" <(curl -L micro.mamba.pm/install.sh)
+          eval "$(micromamba shell hook --shell bash)"
           micromamba create -n xrootd -c conda-forge xrootd
           micromamba activate xrootd
           xrootd -p 32294 xrootd-data &
