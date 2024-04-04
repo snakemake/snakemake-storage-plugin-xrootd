@@ -92,11 +92,13 @@ jobs:
         run: mkdir xrootd-data
 
       - name: Setup XrootD
-        uses: JarvusInnovations/background-action@v1
-        with:
-          run: xrootd -p 32294 xrootd-data
-          wait-for: 10s
-          wait-on: http://localhost:32294
+        #uses: JarvusInnovations/background-action@v1
+        #with:
+        run: |
+          xrootd -p 32294 xrootd-data &
+          sleep 10
+          # wait-for: 10s
+          # wait-on: http://localhost:32294
 
       - name: Run pytest
         run: poetry run coverage run -m pytest tests/tests.py
