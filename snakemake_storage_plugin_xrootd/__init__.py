@@ -1,9 +1,10 @@
 from dataclasses import dataclass, field
-from pathlib import PosixPath
-from typing import Any, Iterable, Mapping, Optional, List
-from urllib.parse import urlparse
+import os
+import re
+from typing import Any, Iterable, Optional, List
 
 from XRootD import client
+from XRootD.client.flags import MkDirFlags, StatInfoFlags
 
 from snakemake_interface_storage_plugins.settings import StorageProviderSettingsBase
 from snakemake_interface_storage_plugins.storage_provider import (  # noqa: F401
@@ -16,101 +17,34 @@ from snakemake_interface_storage_plugins.storage_provider import (  # noqa: F401
 from snakemake_interface_storage_plugins.storage_object import (
     StorageObjectRead,
     StorageObjectWrite,
-    StorageObjectGlob,
     retry_decorator,
 )
 from snakemake_interface_storage_plugins.io import IOCacheStorageInterface
 
 
-def parse_query_params(query_params: List[str]):
-    """Parse query params from command line."""
-    return dict(param.split("=") for param in query_params)
-
-
-def unparse_query_params(query_params: Mapping[str, str]):
-    """Unparse query params to command line."""
-    return [f"{key}={value}" for key, value in query_params.items()]
-
-
 @dataclass
 class StorageProviderSettings(StorageProviderSettingsBase):
-    host: Optional[str] = field(
-        default=None,
+    keep_local: Optional[bool] = field(
+        default=False,
         metadata={
-            "help": "The XrootD host to connect to",
-            "env_var": False,
-            "required": True,
-        },
-    )
-    port: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": "The XrootD port to connect to",
+            "help": "Keep local copy of storage object(s)",
             "env_var": False,
             "required": False,
+            "type": bool,
         },
     )
-    username: Optional[str] = field(
-        default=None,
+    retrieve: Optional[bool] = field(
+        default=False,
         metadata={
-            "help": "The username to use for authentication",
-            "env_var": True,
+            "help": "Download remote files",
+            "env_var": False,
             "required": False,
-        },
-    )
-    password: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "The password to use for authentication",
-            "env_var": True,
-            "required": False,
-        },
-    )
-    query_params: Mapping[str, str] = field(
-        default_factory=dict,
-        metadata={
-            "help": "Optional query parameters for XRootD (e.g. xrd.wantprot=unix, "
-            "authz=XXXXXX)",
-            "env_var": True,
-            # Optionally specify a function that parses the value given by the user.
-            # This is useful to create complex types from the user input.
-            "parse_func": parse_query_params,
-            # If a parse_func is specified, you also have to specify an unparse_func
-            # that converts the parsed value back to a string.
-            "unparse_func": unparse_query_params,
-            "required": False,
-            "nargs": "+",
+            "type": bool,
         },
     )
 
 
-# Required:
-# Implementation of your storage provider
-# This class can be empty as the one below.
-# You can however use it to store global information or maintain e.g. a connection
-# pool.
 class StorageProvider(StorageProviderBase):
-    # For compatibility with future changes, you should not overwrite the __init__
-    # method. Instead, use __post_init__ to set additional attributes and initialize
-    # futher stuff.
-
-    def __post_init__(self):
-        # This is optional and can be removed if not needed.
-        # Alternatively, you can e.g. prepare a connection to your storage backend here.
-        # and set additional attributes.
-
-        userpass = ""
-        if self.settings.username:
-            userpass += self.provider.settings.username
-        if self.settings.password:
-            userpass += f":{self.settings.password}"
-        if userpass:
-            userpass += "@"
-        port = f":{self.settings.port}" if self.settings.port else ""
-        self.netloc = f"{userpass}{self.settings.host}{port}"
-
-        self.filesystem_client = client.FileSystem(f"root://{self.netloc}")
-        self.file_client = client.File()
 
     @classmethod
     def example_queries(cls) -> List[ExampleQuery]:
@@ -118,14 +52,13 @@ class StorageProvider(StorageProviderBase):
         least one)."""
         return [
             ExampleQuery(
-                query="root://eos/user/s/someuser/somefile.txt",
-                description="A file on an XrootD instance. Note that we omit the host "
-                "name from the query as that is given via the settings of the storage "
-                "provider.",
+                query="root://eosuser.cern.ch//eos/user/s/someuser/somefile.txt",
+                description="A file on an XrootD instance.",
                 type=QueryType.ANY,
             )
         ]
 
+    # ?
     def rate_limiter_key(self, query: str, operation: Operation) -> Any:
         """Return a key for identifying a rate limiter given a query and an operation.
 
@@ -133,16 +66,36 @@ class StorageProvider(StorageProviderBase):
         E.g. for a storage provider like http that would be the host name.
         For s3 it might be just the endpoint URL.
         """
-        return self.settings.host
+        return "xrootd"
 
     def default_max_requests_per_second(self) -> float:
         """Return the default maximum number of requests per second for this storage
         provider."""
-        return 10.0
+        return 1.0
 
     def use_rate_limiter(self) -> bool:
         """Return False if no rate limiting is needed for this provider."""
         return True
+
+    @staticmethod
+    def _parse_url(query: str) -> List[str] | None:
+        match = re.search(
+            r"(?P<domain>(?:[A-Za-z]+://)[A-Za-z0-9:@\_\-\.\{\}]+\:?/)(?P<path>.+)",
+            query,
+        )
+        if match is None:
+            return None
+
+        domain = match.group("domain")
+        dirname, filename = os.path.split(match.group("path"))
+        # We need a trailing / to keep XRootD happy
+        dirname += "/"
+
+        # XRootD also needs absoulte paths
+        if not dirname.startswith("/"):
+            dirname = f"/{dirname}"
+
+        return domain, dirname, filename
 
     @classmethod
     def is_valid_query(cls, query: str) -> StorageQueryValidationResult:
@@ -150,21 +103,15 @@ class StorageProvider(StorageProviderBase):
         # Ensure that also queries containing wildcards (e.g. {sample}) are accepted
         # and considered valid. The wildcards will be resolved before the storage
         # object is actually used.
-        parsed = urlparse(query)
-        if parsed.scheme != "root":
+        parsed_query = cls._parse_url(query)
+        if parsed_query is None:
             return StorageQueryValidationResult(
                 valid=False,
-                reason="Scheme must be root://",
+                reason="Malformed XRootD url",
                 query=query,
             )
         else:
             return StorageQueryValidationResult(valid=True, query=query)
-
-    @property
-    def query_params(self):
-        return "&".join(
-            f"{key}={val}" for key, val in self.settings.query_params.items()
-        )
 
 
 # Required:
@@ -172,22 +119,21 @@ class StorageProvider(StorageProviderBase):
 # storage (e.g. because it is read-only see
 # snakemake-storage-http for comparison), remove the corresponding base classes
 # from the list of inherited items.
-class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
+# class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
+class StorageObject(StorageObjectRead, StorageObjectWrite):
     # For compatibility with future changes, you should not overwrite the __init__
     # method. Instead, use __post_init__ to set additional attributes and initialize
     # futher stuff.
 
     def __post_init__(self):
-        # This is optional and can be removed if not needed.
-        # Alternatively, you can e.g. prepare a connection to your storage backend here.
-        # and set additional attributes.
-        self.parsed = urlparse(self.query)
-        self.path = f"/{self.parsed.netloc}{self.parsed.path}"
-        self.url = self._get_url(self.path)
+        # Does is_valid_query happen before this or we need to verify here too?
+        self.domain, self.dirname, self.filename = self.provider._parse_url(self.query)
+        self.path = os.path.join(self.dirname, self.filename)
+        self.file_system = client.FileSystem(self.domain)
+        self.keep_local = self.provider.settings.keep_local
+        self.retrieve = self.provider.settings.retrieve
 
-    def _get_url(self, path):
-        return f"root://{self.provider.netloc}/{path}{self.provider.query_params}"
-
+    # TODO
     async def inventory(self, cache: IOCacheStorageInterface):
         """From this file, try to find as much existence and modification date
         information as possible. Only retrieve that information that comes for free
@@ -204,12 +150,14 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
     def get_inventory_parent(self) -> Optional[str]:
         """Return the parent directory of this object."""
         # this is optional and can be left as is
-        return None
+        return self.domain + self.dirname
 
     def local_suffix(self) -> str:
         """Return a unique suffix for the local path, determined from self.query."""
-        return f"{self.parsed.netloc}/{self.parsed.path}"
+        # path always has a '/' at the end which we do not want here
+        return str(self.path)[1:]
 
+    # Check but should be nothing?
     def cleanup(self):
         """Perform local cleanup of any remainders of the storage object."""
         # self.local_path() should not be removed, as this is taken care of by
@@ -221,35 +169,35 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
     # provided by snakemake-interface-storage-plugins.
     @retry_decorator
     def exists(self) -> bool:
-        return self._exists(self.path)
+        return self._exists(self.query)
 
-    def _exists(self, path) -> bool:
-        status, _ = self.provider.filesystem_client.stat(path)
-        if status.errno == 3011 or status.errno == 3005 or status.errno == 3010:
-            return False
+    def _exists(self, query) -> bool:
+        # we split up the query again so that this can be re-used to check the
+        # existence of other files e.g. the parent directory.
+        domain, dirname, filename = self.provider._parse_url(query)
+        status, stat_info = self.file_system.stat(os.path.join(dirname, filename))
         if not status.ok:
+            if status.errno == 3011:
+                return False
             raise IOError(
-                f"Error checking existence of {path} on XRootD: {status.message}"
+                f"Error checking existence of {query} on XRootD: {status.message}"
             )
         return True
 
-    @retry_decorator
     def mtime(self) -> float:
         # return the modification time
-        status, stat = self.provider.filesystem_client.stat(self.path)
+        status, stat = self.file_system.stat(self.path)
         if not status.ok:
-            raise IOError(f"Error checking existence of {self.url}: {status.message}")
+            raise IOError(f"Error checking existence of {self.query}: {status.message}")
         return stat.modtime
 
-    @retry_decorator
     def size(self) -> int:
         # return the size in bytes
-        status, stat = self.provider.filesystem_client.stat(self.path)
+        status, stat = self.file_system.stat(self.path)
         if not status.ok:
-            raise IOError(f"Error checking existence of {self.url}: {status.message}")
+            raise IOError(f"Error checking existence of {self.query}: {status.message}")
         return stat.size
 
-    @retry_decorator
     def retrieve_object(self):
         # Ensure that the object is accessible locally under self.local_path()
         # check if dir
@@ -269,56 +217,56 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
         #             process.add_job(self._get_url(item_path),
         #                 str(self.local_path() / item_path), force=True)
         # else:
-        process.add_job(self.url, str(self.local_path()), force=True)
+
+        # local path must be an absoulte path as well
+        local_path = os.path.abspath(self.local_path())
+        process.add_job(self.query, local_path, force=True)
 
         process.prepare()
         status, returns = process.run()
         if not status.ok or not returns[0]["status"].ok:
-            raise IOError(f"Error donwloading from {self.url}: {status.message}")
+            raise IOError(f"Error donwloading from {self.query}: {status.message}")
 
     # The following to methods are only required if the class inherits from
     # StorageObjectReadWrite.
 
-    @retry_decorator
+    def _makedirs(self):
+        if not self._exists(self.get_inventory_parent()):
+            status, _ = self.file_system.mkdir(self.dirname, MkDirFlags.MAKEPATH)
+            if not status.ok:
+                raise IOError(
+                    f"Error creating directory {self.query}: {status.message}"
+                )
+
     def store_object(self):
         # Ensure that the object is stored at the location specified by
         # self.local_path().
-        def mkdir(path):
-            if path != "." and path != "/" and not self._exists(path):
-                status, _ = self.provider.filesystem_client.mkdir(
-                    path + "/", flags=client.flags.MkDirFlags.MAKEPATH
-                )
-                if not status.ok:
-                    raise IOError(f"Error creating directory {path}: {status.message}")
-
         process = client.CopyProcess()
-        if self.local_path().is_dir():
-            mkdir(self.path)
-
-            for file in self.local_path().iterdir():
-                process.add_job(str(file), f"{self.url}/{file.name}", force=True)
-        else:
-            parent = str(PosixPath(self.path).parent)
-            mkdir(parent)
-            process.add_job(str(self.local_path()), self.url, force=True)
-
+        self._makedirs()
+        local_path = os.path.abspath(self.local_path())
+        process.add_job(local_path, self.query, force=True)
         process.prepare()
         status, returns = process.run()
         if not status.ok or not returns[0]["status"].ok:
-            raise IOError(f"Error uploading to {self.url}: {status.message}")
+            raise IOError(f"Error uploading to {self.query}: {status.message}")
 
-    @retry_decorator
     def remove(self):
         # Remove the object from the storage.
-        _, stat = self.provider.filesystem_client.stat(self.path)
-        if stat.flags & client.flags.StatInfoFlags.IS_DIR:
-            self.provider.filesystem_client.rmdir(self.path)
+        status, stat = self.file_system.stat(self.path)
+        if not status.ok:
+            raise IOError(f"Error: could not stat {self.query}: {status.message}")
+        if stat.flags & StatInfoFlags.IS_DIR:
+            rm_func = self.file_system.rmdir
         else:
-            self.provider.filesystem_client.rm(self.path)
+            rm_func = self.file_system.rm
+        status, _ = rm_func(self.path)
+        if not status.ok:
+            raise IOError(f"Error removing {self.path}: {status.message}")
 
     # The following to methods are only required if the class inherits from
     # StorageObjectGlob.
 
+    # TODO
     @retry_decorator
     def list_candidate_matches(self) -> Iterable[str]:
         """Return a list of candidate matches in the storage for the query."""
