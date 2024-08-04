@@ -1,11 +1,15 @@
 from dataclasses import dataclass, field
 import os
 import re
-from typing import Any, Iterable, Optional, List
+from typing import Any, Iterable, Optional, List, Type
+
+from reretry import retry
 
 from XRootD import client
 from XRootD.client.flags import MkDirFlags, StatInfoFlags
+from XRootD.client.responses import XRootDStatus
 
+from snakemake_interface_common.logging import get_logger
 from snakemake_interface_storage_plugins.settings import StorageProviderSettingsBase
 from snakemake_interface_storage_plugins.storage_provider import (  # noqa: F401
     StorageProviderBase,
@@ -20,6 +24,26 @@ from snakemake_interface_storage_plugins.storage_object import (
     retry_decorator,
 )
 from snakemake_interface_storage_plugins.io import IOCacheStorageInterface
+
+
+class XRootDFatalException(Exception):
+    """
+    Used to prevent retries for certain XRootD errors with the retry decorator
+    """
+
+    pass
+
+
+def _raise_fatal_error(exception: Type[Exception]):
+    if isinstance(exception, XRootDFatalException):
+        get_logger().warning("Unrecoverable error, no more retries")
+        raise exception
+
+
+# TODO configurable would be nice
+xrootd_retry = retry(
+    tries=3, delay=3, backoff=2, logger=get_logger(), fail_callback=_raise_fatal_error
+)
 
 
 @dataclass
@@ -45,6 +69,33 @@ class StorageProviderSettings(StorageProviderSettingsBase):
 
 
 class StorageProvider(StorageProviderBase):
+
+    def __post_init__(self):
+        # List of error codes that there is no point in retrying
+        self.no_retry_codes = [
+            3000,
+            3001,
+            3002,
+            3006,
+            3008,
+            3009,
+            3010,
+            3011,
+            3013,
+            3017,
+            3021,
+            3025,
+            3030,
+            3031,
+            3032,
+        ]
+
+    def _check_status(self, status: XRootDStatus, error_preamble: str):
+        if not status.ok:
+            if status.errno in self.no_retry_codes:
+                raise XRootDFatalException(f"{error_preamble}: {status.message}")
+            else:
+                raise IOError(f"{error_preamble}: {status.message}")
 
     @classmethod
     def example_queries(cls) -> List[ExampleQuery]:
@@ -164,10 +215,7 @@ class StorageObject(StorageObjectRead, StorageObjectWrite):
         # Snakemake.
         pass
 
-    # Fallible methods should implement some retry logic.
-    # The easiest way to do this (but not the only one) is to use the retry_decorator
-    # provided by snakemake-interface-storage-plugins.
-    @retry_decorator
+    @xrootd_retry
     def exists(self) -> bool:
         return self._exists(self.query)
 
@@ -176,28 +224,30 @@ class StorageObject(StorageObjectRead, StorageObjectWrite):
         # existence of other files e.g. the parent directory.
         domain, dirname, filename = self.provider._parse_url(query)
         status, stat_info = self.file_system.stat(os.path.join(dirname, filename))
+        # a bit special, 3011 == file not found
         if not status.ok:
             if status.errno == 3011:
                 return False
-            raise IOError(
-                f"Error checking existence of {query} on XRootD: {status.message}"
+            self.provider._check_status(
+                status, f"Error checking existence of {query} on XRootD"
             )
         return True
 
+    @xrootd_retry
     def mtime(self) -> float:
         # return the modification time
         status, stat = self.file_system.stat(self.path)
-        if not status.ok:
-            raise IOError(f"Error checking existence of {self.query}: {status.message}")
+        self.provider._check_status(status, f"Error checking info of {self.query}")
         return stat.modtime
 
+    @xrootd_retry
     def size(self) -> int:
         # return the size in bytes
         status, stat = self.file_system.stat(self.path)
-        if not status.ok:
-            raise IOError(f"Error checking existence of {self.query}: {status.message}")
+        self.provider._check_status(status, f"Error checking info of {self.query}")
         return stat.size
 
+    @xrootd_retry
     def retrieve_object(self):
         # Ensure that the object is accessible locally under self.local_path()
         # check if dir
@@ -224,20 +274,23 @@ class StorageObject(StorageObjectRead, StorageObjectWrite):
 
         process.prepare()
         status, returns = process.run()
-        if not status.ok or not returns[0]["status"].ok:
-            raise IOError(f"Error donwloading from {self.query}: {status.message}")
+        self.provider._check_status(status, f"Error downloading from {self.query}")
+        self.provider._check_status(
+            returns[0]["status"], f"Error downloading from {self.query}"
+        )
 
     # The following to methods are only required if the class inherits from
     # StorageObjectReadWrite.
 
+    @xrootd_retry
     def _makedirs(self):
         if not self._exists(self.get_inventory_parent()):
             status, _ = self.file_system.mkdir(self.dirname, MkDirFlags.MAKEPATH)
-            if not status.ok:
-                raise IOError(
-                    f"Error creating directory {self.query}: {status.message}"
-                )
+            self.provider._check_status(
+                status, f"Error creating directory {self.query}"
+            )
 
+    @xrootd_retry
     def store_object(self):
         # Ensure that the object is stored at the location specified by
         # self.local_path().
@@ -247,21 +300,22 @@ class StorageObject(StorageObjectRead, StorageObjectWrite):
         process.add_job(local_path, self.query, force=True)
         process.prepare()
         status, returns = process.run()
-        if not status.ok or not returns[0]["status"].ok:
-            raise IOError(f"Error uploading to {self.query}: {status.message}")
+        self.provider._check_status(status, f"Error uploading to {self.query}")
+        self.provider._check_status(
+            returns[0]["status"], f"Error uploading to {self.query}"
+        )
 
+    @xrootd_retry
     def remove(self):
         # Remove the object from the storage.
         status, stat = self.file_system.stat(self.path)
-        if not status.ok:
-            raise IOError(f"Error: could not stat {self.query}: {status.message}")
+        self.provider._check_status(status, f"Error could not stat {self.path}")
         if stat.flags & StatInfoFlags.IS_DIR:
             rm_func = self.file_system.rmdir
         else:
             rm_func = self.file_system.rm
         status, _ = rm_func(self.path)
-        if not status.ok:
-            raise IOError(f"Error removing {self.path}: {status.message}")
+        self.provider._check_status(status, f"Error removing {self.path}")
 
     # The following to methods are only required if the class inherits from
     # StorageObjectGlob.
