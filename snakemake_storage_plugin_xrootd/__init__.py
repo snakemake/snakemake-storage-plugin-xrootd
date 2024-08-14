@@ -31,10 +31,8 @@ class XRootDFatalException(Exception):
     Used to prevent retries for certain XRootD errors with the retry decorator
     """
 
-    pass
 
-
-def _raise_fatal_error(exception: Type[Exception]):
+def _raise_fatal_error(exception: Type[Exception]) -> None:
     if isinstance(exception, XRootDFatalException):
         get_logger().warning("Unrecoverable error, no more retries")
         raise exception
@@ -121,7 +119,7 @@ class StorageProvider(StorageProviderBase):
             if status.errno in self.no_retry_codes:
                 raise XRootDFatalException(f"{error_preamble}: {status.message}")
             else:
-                raise IOError(f"{error_preamble}: {status.message}")
+                raise OSError(f"{error_preamble}: {status.message}")
 
     @classmethod
     def example_queries(cls) -> List[ExampleQuery]:
@@ -190,7 +188,7 @@ class StorageProvider(StorageProviderBase):
                 user_pass = f"{user}@"
         else:
             if password != "":
-                raise IOError(
+                raise OSError(
                     "XRootD Error: Cannot specify a password without specifying a user"
                 )
             user_pass = ""
@@ -205,12 +203,12 @@ class StorageProvider(StorageProviderBase):
         full_url = URL(dec_url)
         if not full_url.is_valid():
             if URL(new_url).is_valid():
-                raise IOError(
+                raise OSError(
                     f"XRootD Error: URL {self._safe_to_print_url(dec_url)} was made"
                     "invalid when applying the url_decorator"
                 )
             else:
-                raise IOError(
+                raise OSError(
                     f"XRootD Error: URL {self._safe_to_print_url(new_url)} is invalid"
                 )
 
