@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import os
 import re
 from typing import Any, Iterable, Optional, List, Type
@@ -48,28 +48,10 @@ xrootd_retry = retry(
 
 @dataclass
 class StorageProviderSettings(StorageProviderSettingsBase):
-    keep_local: Optional[bool] = field(
-        default=False,
-        metadata={
-            "help": "Keep local copy of storage object(s)",
-            "env_var": False,
-            "required": False,
-            "type": bool,
-        },
-    )
-    retrieve: Optional[bool] = field(
-        default=False,
-        metadata={
-            "help": "Download remote files",
-            "env_var": False,
-            "required": False,
-            "type": bool,
-        },
-    )
+    pass
 
 
 class StorageProvider(StorageProviderBase):
-
     def __post_init__(self):
         # List of error codes that there is no point in retrying
         self.no_retry_codes = [
