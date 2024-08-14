@@ -246,7 +246,6 @@ class StorageProvider(StorageProviderBase):
 # storage (e.g. because it is read-only see
 # snakemake-storage-http for comparison), remove the corresponding base classes
 # from the list of inherited items.
-# class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
 class StorageObject(StorageObjectRead, StorageObjectWrite):
     # For compatibility with future changes, you should not overwrite the __init__
     # method. Instead, use __post_init__ to set additional attributes and initialize
