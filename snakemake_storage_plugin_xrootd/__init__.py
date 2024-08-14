@@ -358,7 +358,6 @@ class StorageObject(StorageObjectRead, StorageObjectWrite):
     @xrootd_retry
     def _makedirs(self):
         if not self._exists(self.get_inventory_parent()):
-            raise XRootDFatalException()
             status, _ = self.file_system.mkdir(self.dirname, MkDirFlags.MAKEPATH)
             self.provider._check_status(
                 status,
