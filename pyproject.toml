@@ -18,7 +18,7 @@ documentation = "https://snakemake.github.io/snakemake-plugin-catalog/plugins/st
 [tool.poetry.dependencies]
 python = "^3.11"
 snakemake-interface-common = "^1.15.0"
-snakemake-interface-storage-plugins = "^3.0.0"
+snakemake-interface-storage-plugins = "^3.3.0"
 xrootd = "^5.6.4"
 
 [tool.poetry.group.dev.dependencies]
@@ -26,4 +26,4 @@ black = "^23.12.0"
 flake8 = "^6.1.0"
 coverage = "^7.3.2"
 pytest = "^7.4.3"
-snakemake = {git="https://github.com/snakemake/snakemake.git"}
+snakemake = "^8.18.0"
