@@ -75,7 +75,10 @@ class StorageProviderSettings(StorageProviderSettingsBase):
     password: Optional[str] = field(
         default=None,
         metadata={
-            "help": "The password to use for authentication",
+            "help": "The password to use for authentication. NOTE: Only use this "
+            "setting in trusted environments! Snakemake will print the "
+            "password in plaintext as part of the XRootD URLs used in the "
+            "inputs/outputs of jobs.",
             "env_var": True,
             "required": False,
         },
@@ -94,6 +97,13 @@ class StorageProvider(StorageProviderBase):
     def __post_init__(self):
         self.username = self.settings.username
         self.password = self.settings.password
+        if self.password is not None:
+            get_logger().warning(
+                "A password has been specified -- it will be printed "
+                "in plaintext when Snakemake displays the "
+                "inputs/outputs of jobs! Only use this option in "
+                "trusted environments."
+            )
         self.host = self.settings.host
         self.port = self.settings.port
         self.url_decorator = self.settings.url_decorator
