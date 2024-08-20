@@ -240,9 +240,8 @@ class StorageProvider(StorageProviderBase):
 
     def postprocess_query(self, query: str) -> str:
         """Postprocess the query by adding any global settings to the url."""
-        # TODO: add hostname, username etc. if missing in query but set in the
-        # plugin settings
-        return query
+        url, _, _ = self._parse_url(query)
+        return str(url)
 
 
 # Required:
