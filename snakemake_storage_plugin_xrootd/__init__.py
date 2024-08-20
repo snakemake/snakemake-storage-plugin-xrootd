@@ -1,10 +1,17 @@
 from dataclasses import dataclass, field
-from pathlib import PosixPath
-from typing import Any, Iterable, Mapping, Optional, List
-from urllib.parse import urlparse
+import os
+from typing import Any, Iterable, Optional, List, Type, Callable
+
+from reretry import retry
 
 from XRootD import client
+from XRootD.client.flags import MkDirFlags, StatInfoFlags
+from XRootD.client.responses import XRootDStatus
+from XRootD.client import URL
 
+from snakemake.exceptions import WorkflowError
+
+from snakemake_interface_common.logging import get_logger
 from snakemake_interface_storage_plugins.settings import StorageProviderSettingsBase
 from snakemake_interface_storage_plugins.storage_provider import (  # noqa: F401
     StorageProviderBase,
@@ -16,20 +23,27 @@ from snakemake_interface_storage_plugins.storage_provider import (  # noqa: F401
 from snakemake_interface_storage_plugins.storage_object import (
     StorageObjectRead,
     StorageObjectWrite,
-    StorageObjectGlob,
     retry_decorator,
 )
 from snakemake_interface_storage_plugins.io import IOCacheStorageInterface
 
 
-def parse_query_params(query_params: List[str]):
-    """Parse query params from command line."""
-    return dict(param.split("=") for param in query_params)
+class XRootDFatalException(Exception):
+    """
+    Used to prevent retries for certain XRootD errors with the retry decorator
+    """
 
 
-def unparse_query_params(query_params: Mapping[str, str]):
-    """Unparse query params to command line."""
-    return [f"{key}={value}" for key, value in query_params.items()]
+def _raise_fatal_error(exception: Type[Exception]) -> None:
+    if isinstance(exception, XRootDFatalException):
+        get_logger().warning("Unrecoverable error, no more retries")
+        raise exception
+
+
+# TODO configurable would be nice
+xrootd_retry = retry(
+    tries=3, delay=3, backoff=2, logger=get_logger(), fail_callback=_raise_fatal_error
+)
 
 
 @dataclass
@@ -39,7 +53,7 @@ class StorageProviderSettings(StorageProviderSettingsBase):
         metadata={
             "help": "The XrootD host to connect to",
             "env_var": False,
-            "required": True,
+            "required": False,
         },
     )
     port: Optional[int] = field(
@@ -61,56 +75,62 @@ class StorageProviderSettings(StorageProviderSettingsBase):
     password: Optional[str] = field(
         default=None,
         metadata={
-            "help": "The password to use for authentication",
+            "help": "The password to use for authentication. NOTE: Only use this "
+            "setting in trusted environments! Snakemake will print the "
+            "password in plaintext as part of the XRootD URLs used in the "
+            "inputs/outputs of jobs.",
             "env_var": True,
             "required": False,
         },
     )
-    query_params: Mapping[str, str] = field(
-        default_factory=dict,
+    url_decorator: Optional[Callable] = field(
+        default=lambda x: x,
         metadata={
-            "help": "Optional query parameters for XRootD (e.g. xrd.wantprot=unix, "
-            "authz=XXXXXX)",
-            "env_var": True,
-            # Optionally specify a function that parses the value given by the user.
-            # This is useful to create complex types from the user input.
-            "parse_func": parse_query_params,
-            # If a parse_func is specified, you also have to specify an unparse_func
-            # that converts the parsed value back to a string.
-            "unparse_func": unparse_query_params,
+            "help": "A function to decorate the URL e.g. wrapping an auth token.",
+            "env_var": False,
             "required": False,
-            "nargs": "+",
         },
     )
 
 
-# Required:
-# Implementation of your storage provider
-# This class can be empty as the one below.
-# You can however use it to store global information or maintain e.g. a connection
-# pool.
 class StorageProvider(StorageProviderBase):
-    # For compatibility with future changes, you should not overwrite the __init__
-    # method. Instead, use __post_init__ to set additional attributes and initialize
-    # futher stuff.
-
     def __post_init__(self):
-        # This is optional and can be removed if not needed.
-        # Alternatively, you can e.g. prepare a connection to your storage backend here.
-        # and set additional attributes.
+        self.username = self.settings.username
+        self.password = self.settings.password
+        if self.password is not None:
+            get_logger().warning(
+                "A password has been specified -- it will be printed "
+                "in plaintext when Snakemake displays the "
+                "inputs/outputs of jobs! Only use this option in "
+                "trusted environments."
+            )
+        self.host = self.settings.host
+        self.port = self.settings.port
+        self.url_decorator = self.settings.url_decorator
+        # List of error codes that there is no point in retrying
+        self.no_retry_codes = [
+            3000,
+            3001,
+            3002,
+            3006,
+            3008,
+            3009,
+            3010,
+            3011,
+            3013,
+            3017,
+            3021,
+            3025,
+            3030,
+            3031,
+            3032,
+        ]
 
-        userpass = ""
-        if self.settings.username:
-            userpass += self.provider.settings.username
-        if self.settings.password:
-            userpass += f":{self.settings.password}"
-        if userpass:
-            userpass += "@"
-        port = f":{self.settings.port}" if self.settings.port else ""
-        self.netloc = f"{userpass}{self.settings.host}{port}"
-
-        self.filesystem_client = client.FileSystem(f"root://{self.netloc}")
-        self.file_client = client.File()
+    def _check_status(self, status: XRootDStatus, error_preamble: str):
+        if not status.ok:
+            if status.errno in self.no_retry_codes:
+                raise XRootDFatalException(f"{error_preamble}: {status.message}")
+            raise WorkflowError(f"{error_preamble}: {status.message}")
 
     @classmethod
     def example_queries(cls) -> List[ExampleQuery]:
@@ -118,14 +138,19 @@ class StorageProvider(StorageProviderBase):
         least one)."""
         return [
             ExampleQuery(
-                query="root://eos/user/s/someuser/somefile.txt",
-                description="A file on an XrootD instance. Note that we omit the host "
-                "name from the query as that is given via the settings of the storage "
-                "provider.",
+                query="root://eosuser.cern.ch//eos/user/s/someuser/somefile.txt",
+                description="A file on a XrootD instance not specifying any arguments.",
                 type=QueryType.ANY,
-            )
+            ),
+            ExampleQuery(
+                query="root://eos/user/s/someuser/somefile.txt",
+                description="A file on an XrootD instance where the host has been"
+                "specified in the storage object.",
+                type=QueryType.ANY,
+            ),
         ]
 
+    # ?
     def rate_limiter_key(self, query: str, operation: Operation) -> Any:
         """Return a key for identifying a rate limiter given a query and an operation.
 
@@ -133,16 +158,84 @@ class StorageProvider(StorageProviderBase):
         E.g. for a storage provider like http that would be the host name.
         For s3 it might be just the endpoint URL.
         """
-        return self.settings.host
+        return "xrootd"
 
     def default_max_requests_per_second(self) -> float:
         """Return the default maximum number of requests per second for this storage
         provider."""
-        return 10.0
+        return 1.0
 
     def use_rate_limiter(self) -> bool:
         """Return False if no rate limiting is needed for this provider."""
         return True
+
+    @staticmethod
+    def _no_pass_url(url: str) -> str:
+        new_url = URL(url)
+        if new_url.password == "":
+            return str(new_url)
+        return str(new_url).replace(new_url.password, "****")
+
+    @staticmethod
+    def _no_params_url(url: str) -> str:
+        new_url = URL(url)
+        if new_url.path_with_params != new_url.path:
+            return url.replace(new_url.path_with_params, f"{new_url.path}?****")
+        return url
+
+    @staticmethod
+    def _safe_to_print_url(url: str) -> str:
+        return StorageProvider._no_params_url(StorageProvider._no_pass_url(url))
+
+    def _parse_url(self, query: str) -> List[str] | None:
+        url = URL(query)
+        user = self.username or url.username
+        password = self.password or url.password
+        host = self.host or url.hostname
+        port = self.port or url.port
+        match (user, password):
+            case ("", ""):
+                user_pass = ""
+            case ("", _):
+                raise WorkflowError(
+                    "XRootD Error: Cannot specify a password without "
+                    "specifying a user. You may need to unset the "
+                    "`SNAKEMAKE_STORAGE_XROOTD_PASSWORD` environment "
+                    "variable"
+                )
+            case (_, ""):
+                user_pass = f"{user}@"
+            case (_, _):
+                user_pass = f"{user}:{password}@"
+
+        # The XRootD parsing does not understand the host not being there
+        if self.host is not None and self.host != url.hostname:
+            full_path = f"/{url.hostname}/{url.path_with_params}"
+        else:
+            full_path = url.path_with_params
+        new_url = f"{url.protocol}://{user_pass}{host}:{port}/{full_path}"
+        dec_url = self.url_decorator(new_url)
+        full_url = URL(dec_url)
+        if not full_url.is_valid():
+            if URL(new_url).is_valid():
+                raise WorkflowError(
+                    f"XRootD Error: URL {self._safe_to_print_url(dec_url)} was made"
+                    "invalid when applying the url_decorator"
+                )
+            else:
+                raise WorkflowError(
+                    f"XRootD Error: URL {self._safe_to_print_url(new_url)} is invalid"
+                )
+
+        dirname, filename = os.path.split(full_url.path)
+        # We need a trailing / to keep XRootD happy
+        dirname += "/"
+
+        # XRootD also needs absoulte paths
+        if not dirname.startswith("/"):
+            dirname = f"/{dirname}"
+
+        return full_url, dirname, filename
 
     @classmethod
     def is_valid_query(cls, query: str) -> StorageQueryValidationResult:
@@ -150,21 +243,19 @@ class StorageProvider(StorageProviderBase):
         # Ensure that also queries containing wildcards (e.g. {sample}) are accepted
         # and considered valid. The wildcards will be resolved before the storage
         # object is actually used.
-        parsed = urlparse(query)
-        if parsed.scheme != "root":
+        url = URL(query)
+        if not url.is_valid():
             return StorageQueryValidationResult(
                 valid=False,
-                reason="Scheme must be root://",
+                reason="Malformed XRootD url",
                 query=query,
             )
-        else:
-            return StorageQueryValidationResult(valid=True, query=query)
+        return StorageQueryValidationResult(valid=True, query=query)
 
-    @property
-    def query_params(self):
-        return "&".join(
-            f"{key}={val}" for key, val in self.settings.query_params.items()
-        )
+    def postprocess_query(self, query: str) -> str:
+        """Postprocess the query by adding any global settings to the url."""
+        url, _, _ = self._parse_url(query)
+        return str(url)
 
 
 # Required:
@@ -172,22 +263,18 @@ class StorageProvider(StorageProviderBase):
 # storage (e.g. because it is read-only see
 # snakemake-storage-http for comparison), remove the corresponding base classes
 # from the list of inherited items.
-class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
+class StorageObject(StorageObjectRead, StorageObjectWrite):
     # For compatibility with future changes, you should not overwrite the __init__
     # method. Instead, use __post_init__ to set additional attributes and initialize
     # futher stuff.
 
     def __post_init__(self):
-        # This is optional and can be removed if not needed.
-        # Alternatively, you can e.g. prepare a connection to your storage backend here.
-        # and set additional attributes.
-        self.parsed = urlparse(self.query)
-        self.path = f"/{self.parsed.netloc}{self.parsed.path}"
-        self.url = self._get_url(self.path)
+        # Does is_valid_query happen before this or we need to verify here too?
+        self.url, self.dirname, self.filename = self.provider._parse_url(self.query)
+        self.path = self.url.path
+        self.file_system = client.FileSystem(self.url.hostid)
 
-    def _get_url(self, path):
-        return f"root://{self.provider.netloc}/{path}{self.provider.query_params}"
-
+    # TODO
     async def inventory(self, cache: IOCacheStorageInterface):
         """From this file, try to find as much existence and modification date
         information as possible. Only retrieve that information that comes for free
@@ -204,121 +291,129 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
     def get_inventory_parent(self) -> Optional[str]:
         """Return the parent directory of this object."""
         # this is optional and can be left as is
-        return None
+        return str(self.url).replace(self.filename, "")
 
     def local_suffix(self) -> str:
         """Return a unique suffix for the local path, determined from self.query."""
-        return f"{self.parsed.netloc}/{self.parsed.path}"
+        # path always has a '/' at the end which we do not want here
+        return str(self.path)[2:]
 
+    # Check but should be nothing?
     def cleanup(self):
         """Perform local cleanup of any remainders of the storage object."""
         # self.local_path() should not be removed, as this is taken care of by
         # Snakemake.
         pass
 
-    # Fallible methods should implement some retry logic.
-    # The easiest way to do this (but not the only one) is to use the retry_decorator
-    # provided by snakemake-interface-storage-plugins.
-    @retry_decorator
+    @xrootd_retry
     def exists(self) -> bool:
-        return self._exists(self.path)
+        return self._exists(self.query)
 
-    def _exists(self, path) -> bool:
-        status, _ = self.provider.filesystem_client.stat(path)
-        if status.errno == 3011 or status.errno == 3005 or status.errno == 3010:
-            return False
+    def _exists(self, query) -> bool:
+        # we split up the query again so that this can be re-used to check the
+        # existence of other files e.g. the parent directory.
+        url, dirname, filename = self.provider._parse_url(query)
+        status, stat_info = self.file_system.stat(url.path)
+        # a bit special, 3011 == file not found
         if not status.ok:
-            raise IOError(
-                f"Error checking existence of {path} on XRootD: {status.message}"
+            if status.errno == 3011:
+                return False
+            self.provider._check_status(
+                status,
+                "Error checking existence of "
+                f"{self.provider._safe_to_print_url(query)} on XRootD",
             )
         return True
 
-    @retry_decorator
+    @xrootd_retry
     def mtime(self) -> float:
         # return the modification time
-        status, stat = self.provider.filesystem_client.stat(self.path)
-        if not status.ok:
-            raise IOError(f"Error checking existence of {self.url}: {status.message}")
+        status, stat = self.file_system.stat(self.path)
+        self.provider._check_status(
+            status,
+            f"Error checking info of {self.provider._safe_to_print_url(self.query)}",
+        )
         return stat.modtime
 
-    @retry_decorator
+    @xrootd_retry
     def size(self) -> int:
         # return the size in bytes
-        status, stat = self.provider.filesystem_client.stat(self.path)
-        if not status.ok:
-            raise IOError(f"Error checking existence of {self.url}: {status.message}")
+        status, stat = self.file_system.stat(self.path)
+        self.provider._check_status(
+            status,
+            f"Error checking info of {self.provider._safe_to_print_url(self.query)}",
+        )
         return stat.size
 
-    @retry_decorator
+    @xrootd_retry
     def retrieve_object(self):
         # Ensure that the object is accessible locally under self.local_path()
         # check if dir
 
         process = client.CopyProcess()
 
-        # TODO is special handling for directories needed?
-        # if stat.flags & client.flags.StatInfoFlags.IS_DIR:
-        #     self.local_path().mkdir(parents=True, exist_ok=True)
-        #     _, listing = self.provider.filesystem_client.dirlist(
-        #         self.path, flags=client.flags.DirListFlags.STAT)
-        #     for item in listing:
-        #         item_path = f"{self.path}/{item.name}"
-        #         if item.statinfo.flags & client.flags.StatInfoFlags.IS_DIR:
-
-        #         else:
-        #             process.add_job(self._get_url(item_path),
-        #                 str(self.local_path() / item_path), force=True)
-        # else:
-        process.add_job(self.url, str(self.local_path()), force=True)
+        # local path must be an absoulte path as well
+        local_path = os.path.abspath(self.local_path())
+        process.add_job(str(self.url), local_path, force=True)
 
         process.prepare()
         status, returns = process.run()
-        if not status.ok or not returns[0]["status"].ok:
-            raise IOError(f"Error donwloading from {self.url}: {status.message}")
+        self.provider._check_status(
+            status,
+            f"Error downloading from {self.provider._safe_to_print_url(self.query)}",
+        )
+        self.provider._check_status(
+            returns[0]["status"],
+            f"Error downloading from {self.provider._safe_to_print_url(self.query)}",
+        )
 
     # The following to methods are only required if the class inherits from
     # StorageObjectReadWrite.
 
-    @retry_decorator
+    @xrootd_retry
+    def _makedirs(self):
+        if not self._exists(self.get_inventory_parent()):
+            status, _ = self.file_system.mkdir(self.dirname, MkDirFlags.MAKEPATH)
+            self.provider._check_status(
+                status,
+                "Error creating directory "
+                f"{self.provider._safe_to_print_url(self.query)}",
+            )
+
+    @xrootd_retry
     def store_object(self):
         # Ensure that the object is stored at the location specified by
         # self.local_path().
-        def mkdir(path):
-            if path != "." and path != "/" and not self._exists(path):
-                status, _ = self.provider.filesystem_client.mkdir(
-                    path + "/", flags=client.flags.MkDirFlags.MAKEPATH
-                )
-                if not status.ok:
-                    raise IOError(f"Error creating directory {path}: {status.message}")
-
         process = client.CopyProcess()
-        if self.local_path().is_dir():
-            mkdir(self.path)
-
-            for file in self.local_path().iterdir():
-                process.add_job(str(file), f"{self.url}/{file.name}", force=True)
-        else:
-            parent = str(PosixPath(self.path).parent)
-            mkdir(parent)
-            process.add_job(str(self.local_path()), self.url, force=True)
-
+        self._makedirs()
+        local_path = os.path.abspath(self.local_path())
+        process.add_job(local_path, str(self.url), force=True)
         process.prepare()
         status, returns = process.run()
-        if not status.ok or not returns[0]["status"].ok:
-            raise IOError(f"Error uploading to {self.url}: {status.message}")
+        self.provider._check_status(
+            status, f"Error uploading to {self.provider._safe_to_print_url(self.query)}"
+        )
+        self.provider._check_status(
+            returns[0]["status"],
+            f"Error uploading to {self.provider._safe_to_print_url(self.query)}",
+        )
 
-    @retry_decorator
+    @xrootd_retry
     def remove(self):
         # Remove the object from the storage.
-        _, stat = self.provider.filesystem_client.stat(self.path)
-        if stat.flags & client.flags.StatInfoFlags.IS_DIR:
-            self.provider.filesystem_client.rmdir(self.path)
+        status, stat = self.file_system.stat(self.path)
+        self.provider._check_status(status, f"Error could not stat {self.path}")
+        if stat.flags & StatInfoFlags.IS_DIR:
+            rm_func = self.file_system.rmdir
         else:
-            self.provider.filesystem_client.rm(self.path)
+            rm_func = self.file_system.rm
+        status, _ = rm_func(self.path)
+        self.provider._check_status(status, f"Error removing {self.path}")
 
     # The following to methods are only required if the class inherits from
     # StorageObjectGlob.
 
+    # TODO
     @retry_decorator
     def list_candidate_matches(self) -> Iterable[str]:
         """Return a list of candidate matches in the storage for the query."""

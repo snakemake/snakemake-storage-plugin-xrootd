@@ -8,7 +8,8 @@ version = "0.1.2"
 description = "A Snakemake storage plugin for xrootd storage"
 authors = [
     "Chris Burr <christopher.burr@cern.ch>",
-    "Johannes Koester <johannes.koester@uni-due.de>"
+    "Johannes Koester <johannes.koester@uni-due.de>",
+    "Matthew Monk <matthew.david.monk@cern.ch>"
 ]
 readme = "README.md"
 repository = "https://github.com/snakemake/snakemake-storage-plugin-xrootd"
@@ -17,7 +18,7 @@ documentation = "https://snakemake.github.io/snakemake-plugin-catalog/plugins/st
 [tool.poetry.dependencies]
 python = "^3.11"
 snakemake-interface-common = "^1.15.0"
-snakemake-interface-storage-plugins = "^3.2.4"
+snakemake-interface-storage-plugins = "^3.3.0"
 xrootd = "^5.6.4"
 
 [tool.poetry.group.dev.dependencies]
