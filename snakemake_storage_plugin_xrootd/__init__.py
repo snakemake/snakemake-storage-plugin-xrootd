@@ -259,8 +259,6 @@ class StorageObject(StorageObjectRead, StorageObjectWrite):
         self.url, self.dirname, self.filename = self.provider._parse_url(self.query)
         self.path = self.url.path
         self.file_system = client.FileSystem(self.url.hostid)
-        self.keep_local = self.provider.settings.keep_local
-        self.retrieve = self.provider.settings.retrieve
 
     # TODO
     async def inventory(self, cache: IOCacheStorageInterface):
