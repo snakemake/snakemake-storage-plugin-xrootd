@@ -118,8 +118,7 @@ class StorageProvider(StorageProviderBase):
         if not status.ok:
             if status.errno in self.no_retry_codes:
                 raise XRootDFatalException(f"{error_preamble}: {status.message}")
-            else:
-                raise OSError(f"{error_preamble}: {status.message}")
+            raise OSError(f"{error_preamble}: {status.message}")
 
     @classmethod
     def example_queries(cls) -> List[ExampleQuery]:
@@ -163,16 +162,14 @@ class StorageProvider(StorageProviderBase):
         new_url = URL(url)
         if new_url.password == "":
             return str(new_url)
-        else:
-            return str(new_url).replace(new_url.password, "****")
+        return str(new_url).replace(new_url.password, "****")
 
     @staticmethod
     def _no_params_url(url: str) -> str:
         new_url = URL(url)
         if new_url.path_with_params != new_url.path:
             return url.replace(new_url.path_with_params, f"{new_url.path}?****")
-        else:
-            return url
+        return url
 
     @staticmethod
     def _safe_to_print_url(url: str) -> str:
@@ -238,8 +235,7 @@ class StorageProvider(StorageProviderBase):
                 reason="Malformed XRootD url",
                 query=query,
             )
-        else:
-            return StorageQueryValidationResult(valid=True, query=query)
+        return StorageQueryValidationResult(valid=True, query=query)
 
     def postprocess_query(self, query: str) -> str:
         """Postprocess the query by adding any global settings to the url."""
