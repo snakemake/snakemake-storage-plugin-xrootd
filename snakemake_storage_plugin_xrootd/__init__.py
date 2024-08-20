@@ -169,7 +169,10 @@ class StorageProvider(StorageProviderBase):
     @staticmethod
     def _no_params_url(url: str) -> str:
         new_url = URL(url)
-        return url.replace(new_url.path_with_params, f"{new_url.path}?****")
+        if new_url.path_with_params != new_url.path:
+            return url.replace(new_url.path_with_params, f"{new_url.path}?****")
+        else:
+            return url
 
     @staticmethod
     def _safe_to_print_url(url: str) -> str:
@@ -195,10 +198,10 @@ class StorageProvider(StorageProviderBase):
 
         # The XRootD parsing does not understand the host not being there
         if self.host is not None and self.host != url.hostname:
-            full_path = f"{url.hostname}/{url.path_with_params}"
+            full_path = f"/{url.hostname}/{url.path_with_params}"
         else:
             full_path = url.path_with_params
-        new_url = f"{url.protocol}://{user_pass}{host}:{port}//{full_path}"
+        new_url = f"{url.protocol}://{user_pass}{host}:{port}/{full_path}"
         dec_url = self.url_decorator(new_url)
         full_url = URL(dec_url)
         if not full_url.is_valid():
@@ -306,8 +309,8 @@ class StorageObject(StorageObjectRead, StorageObjectWrite):
                 return False
             self.provider._check_status(
                 status,
-                f"Error checking existence of {self.provider._safe_to_print_url(query)}"
-                "on XRootD",
+                "Error checking existence of "
+                f"{self.provider._safe_to_print_url(query)} on XRootD",
             )
         return True
 
@@ -331,7 +334,7 @@ class StorageObject(StorageObjectRead, StorageObjectWrite):
         )
         return stat.size
 
-    # @xrootd_retry
+    @xrootd_retry
     def retrieve_object(self):
         # Ensure that the object is accessible locally under self.local_path()
         # check if dir
