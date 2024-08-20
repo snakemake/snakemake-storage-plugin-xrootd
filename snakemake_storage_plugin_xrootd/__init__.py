@@ -9,6 +9,8 @@ from XRootD.client.flags import MkDirFlags, StatInfoFlags
 from XRootD.client.responses import XRootDStatus
 from XRootD.client import URL
 
+from snakemake.exceptions import WorkflowError
+
 from snakemake_interface_common.logging import get_logger
 from snakemake_interface_storage_plugins.settings import StorageProviderSettingsBase
 from snakemake_interface_storage_plugins.storage_provider import (  # noqa: F401
@@ -118,7 +120,7 @@ class StorageProvider(StorageProviderBase):
         if not status.ok:
             if status.errno in self.no_retry_codes:
                 raise XRootDFatalException(f"{error_preamble}: {status.message}")
-            raise OSError(f"{error_preamble}: {status.message}")
+            raise WorkflowError(f"{error_preamble}: {status.message}")
 
     @classmethod
     def example_queries(cls) -> List[ExampleQuery]:
@@ -181,17 +183,20 @@ class StorageProvider(StorageProviderBase):
         password = self.password or url.password
         host = self.host or url.hostname
         port = self.port or url.port
-        if user != "":
-            if password != "":
-                user_pass = f"{user}:{password}@"
-            else:
-                user_pass = f"{user}@"
-        else:
-            if password != "":
-                raise OSError(
-                    "XRootD Error: Cannot specify a password without specifying a user"
+        match (user, password):
+            case ("", ""):
+                user_pass = ""
+            case ("", _):
+                raise WorkflowError(
+                    "XRootD Error: Cannot specify a password without "
+                    "specifying a user. You may need to unset the "
+                    "`SNAKEMAKE_STORAGE_XROOTD_PASSWORD` environment "
+                    "variable"
                 )
-            user_pass = ""
+            case (_, ""):
+                user_pass = f"{user}@"
+            case (_, _):
+                user_pass = f"{user}:{password}@"
 
         # The XRootD parsing does not understand the host not being there
         if self.host is not None and self.host != url.hostname:
@@ -203,12 +208,12 @@ class StorageProvider(StorageProviderBase):
         full_url = URL(dec_url)
         if not full_url.is_valid():
             if URL(new_url).is_valid():
-                raise OSError(
+                raise WorkflowError(
                     f"XRootD Error: URL {self._safe_to_print_url(dec_url)} was made"
                     "invalid when applying the url_decorator"
                 )
             else:
-                raise OSError(
+                raise WorkflowError(
                     f"XRootD Error: URL {self._safe_to_print_url(new_url)} is invalid"
                 )
 
