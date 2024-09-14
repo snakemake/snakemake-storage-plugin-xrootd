@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.1.3...v0.1.4) (2024-09-14)
+
+
+### Bug Fixes
+
+* Ensure URL parameters are kept ([#13](https://github.com/snakemake/snakemake-storage-plugin-xrootd/issues/13)) ([9e186d6](https://github.com/snakemake/snakemake-storage-plugin-xrootd/commit/9e186d6453cda0434aff8008af976f5573cee413))
+
 ## [0.1.3](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.1.2...v0.1.3) (2024-08-20)
 
 
