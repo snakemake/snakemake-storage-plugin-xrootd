@@ -313,7 +313,7 @@ class StorageObject(StorageObjectRead, StorageObjectWrite):
         # we split up the query again so that this can be re-used to check the
         # existence of other files e.g. the parent directory.
         url, dirname, filename = self.provider._parse_url(query)
-        status, stat_info = self.file_system.stat(url.path)
+        status, stat_info = self.file_system.stat(url.path_with_params)
         # a bit special, 3011 == file not found
         if not status.ok:
             if status.errno == 3011:
@@ -328,7 +328,7 @@ class StorageObject(StorageObjectRead, StorageObjectWrite):
     @xrootd_retry
     def mtime(self) -> float:
         # return the modification time
-        status, stat = self.file_system.stat(self.path)
+        status, stat = self.file_system.stat(self.url.path_with_params)
         self.provider._check_status(
             status,
             f"Error checking info of {self.provider._safe_to_print_url(self.query)}",
@@ -338,7 +338,7 @@ class StorageObject(StorageObjectRead, StorageObjectWrite):
     @xrootd_retry
     def size(self) -> int:
         # return the size in bytes
-        status, stat = self.file_system.stat(self.path)
+        status, stat = self.file_system.stat(self.url.path_with_params)
         self.provider._check_status(
             status,
             f"Error checking info of {self.provider._safe_to_print_url(self.query)}",
