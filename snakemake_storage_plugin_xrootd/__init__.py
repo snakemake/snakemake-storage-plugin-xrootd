@@ -84,7 +84,7 @@ class StorageProviderSettings(StorageProviderSettingsBase):
         },
     )
     url_decorator: Optional[Callable] = field(
-        default=lambda x: x,
+        default=None,
         metadata={
             "help": "A function to decorate the URL e.g. wrapping an auth token.",
             "env_var": False,
@@ -106,7 +106,7 @@ class StorageProvider(StorageProviderBase):
             )
         self.host = self.settings.host
         self.port = self.settings.port
-        self.url_decorator = self.settings.url_decorator
+        self.url_decorator = self.settings.url_decorator or (lambda x: x)
         # List of error codes that there is no point in retrying
         self.no_retry_codes = [
             3000,
