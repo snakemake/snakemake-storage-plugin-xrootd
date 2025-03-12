@@ -11,59 +11,18 @@ defaults:
     shell: bash -leo pipefail {0} {0}
 
 jobs:
-  formatting:
+  pre-commit:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the code
         uses: actions/checkout@v3
 
-      - uses: actions/setup-python@v4
+      - uses: prefix-dev/setup-pixi@v0.8.3
         with:
-          python-version: "3.12"
+          cache: true
 
-      - name: Install poetry
-        run: pip install poetry
-
-      - name: Determine dependencies
-        run: poetry lock
-
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.12"
-          cache: poetry
-
-      - name: Install Dependencies using Poetry
-        run: poetry install
-
-      - name: Check formatting
-        run: poetry run black --check .
-
-  linting:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out the code
-        uses: actions/checkout@v3
-
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.12"
-
-      - name: Install poetry
-        run: pip install poetry
-
-      - name: Determine dependencies
-        run: poetry lock
-
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.12"
-          cache: poetry
-
-      - name: Install Dependencies using Poetry
-        run: poetry install
-
-      - name: Check code
-        run: poetry run flake8
+      - name: Run pre-commit
+        run: pixi exec pre-commit run --all-files
 
   testing:
     runs-on: ubuntu-latest
