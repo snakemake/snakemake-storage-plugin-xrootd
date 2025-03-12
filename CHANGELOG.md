@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.9](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.1.8...v0.1.9) (2025-03-12)
+
+
+### Bug Fixes
+
+* Move publishing to release-please workflow  ([#26](https://github.com/snakemake/snakemake-storage-plugin-xrootd/issues/26)) ([5154f20](https://github.com/snakemake/snakemake-storage-plugin-xrootd/commit/5154f206fb9f4af0132aa57fecfad4c8a27624e7))
+
 ## [0.1.8](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.1.7...v0.1.8) (2025-03-12)
 
 
