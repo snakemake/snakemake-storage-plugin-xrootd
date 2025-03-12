@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.5](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.1.4...v0.1.5) (2025-03-12)
+
+
+### Bug Fixes
+
+* Change settings to be more documentation friendly ([dd22f04](https://github.com/snakemake/snakemake-storage-plugin-xrootd/commit/dd22f04a9d8ce0fb73bc225fea5b6ba51e1eb348))
+* Switch to using trusted publishing ([#18](https://github.com/snakemake/snakemake-storage-plugin-xrootd/issues/18)) ([244a76d](https://github.com/snakemake/snakemake-storage-plugin-xrootd/commit/244a76dc889ff66e5f3b3324f694e4ba4304efe3))
+
 ## [0.1.4](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.1.3...v0.1.4) (2024-09-14)
 
 
