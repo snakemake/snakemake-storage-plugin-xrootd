@@ -1,9 +1,38 @@
+import subprocess
+import time
 from typing import Optional, Type
+
+import pytest
 from snakemake_interface_storage_plugins.tests import TestStorageBase
 from snakemake_interface_storage_plugins.storage_provider import StorageProviderBase
 from snakemake_interface_storage_plugins.settings import StorageProviderSettingsBase
 
 from snakemake_storage_plugin_xrootd import StorageProvider, StorageProviderSettings
+import socket
+
+XROOTD_TEST_PORT = 32293
+
+
+@pytest.fixture(scope="module", autouse=True)
+def start_xrootd_server():
+    """Starts an XRootD server for testing."""
+    proc = subprocess.Popen(["xrootd", "-p", str(XROOTD_TEST_PORT)])
+    start_time = time.time()
+
+    while time.time() - start_time < 10:
+        if proc.poll() is not None:
+            pytest.fail("XRootD server terminated unexpectedly.")
+        try:
+            with socket.create_connection(("localhost", XROOTD_TEST_PORT), timeout=1):
+                break
+        except Exception:
+            time.sleep(0.1)
+    else:
+        pytest.fail("XRootD server did not start within 10 seconds.")
+
+    yield XROOTD_TEST_PORT
+
+    proc.terminate()
 
 
 class TestStorage(TestStorageBase):
@@ -28,5 +57,5 @@ class TestStorage(TestStorageBase):
         # instantiate StorageProviderSettings of this plugin as appropriate
         return StorageProviderSettings(
             host="localhost",
-            port=32294,
+            port=XROOTD_TEST_PORT,
         )
