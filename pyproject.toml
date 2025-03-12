@@ -1,6 +1,7 @@
 [project]
 name = "snakemake-storage-plugin-xrootd"
 dynamic = ["version"]
+requires-python = ">= 3.11"
 description = "A Snakemake storage plugin for XRootD storage"
 authors = [
     {name = "Chris Burr", email = "christopher.burr@cern.ch"},
