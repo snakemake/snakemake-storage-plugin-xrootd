@@ -1,8 +1,0 @@
-name: snakemake-storage-plugin-xrootd-dev
-channels:
-  - conda-forge
-  - nodefaults
-dependencies:
-  - xrootd
-  - python =3.12
-  - poetry

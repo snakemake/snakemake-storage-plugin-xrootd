@@ -161,3 +161,9 @@ cython_debug/
 #.idea/
 
 poetry.lock
+
+# pixi environments
+.pixi
+*.egg-info
+# We choose not to commit the pixi.lock file as it changes every time a commit is made
+pixi.lock

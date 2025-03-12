@@ -18,8 +18,6 @@ jobs:
         uses: actions/checkout@v3
 
       - uses: prefix-dev/setup-pixi@v0.8.3
-        with:
-          cache: true
 
       - name: Run pre-commit
         run: pixi exec pre-commit run --all-files
@@ -27,40 +25,12 @@ jobs:
   testing:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.12"
-
-      - name: Install poetry
-        run: pip install poetry
-
-      - name: Determine dependencies
-        run: poetry lock
-
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.12"
-          cache: poetry
-
-      - name: Install dependencies
-        run: poetry install
-
-      - name: Setup XrootD
-        #uses: JarvusInnovations/background-action@v1
-        #with:
-        run: |
-          "${SHELL}" <(curl -L micro.mamba.pm/install.sh)
-          eval "$(micromamba shell hook --shell bash)"
-          micromamba create -n xrootd -c conda-forge xrootd
-          micromamba activate xrootd
-          xrootd -p 32294 &
-          sleep 10
-          micromamba deactivate
+      - uses: prefix-dev/setup-pixi@v0.8.3
 
       - name: Run pytest
-        run: poetry run coverage run -m pytest tests/tests.py -v
+        run: pixi run test-coverage
 
-      - name: Run Coverage
-        run: poetry run coverage report -m
+      - name: Run coverage
+        run: pixi run coverage-report
