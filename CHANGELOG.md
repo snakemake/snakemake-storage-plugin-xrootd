@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.1.9...v0.2.0) (2025-03-12)
+
+
+### Bug Fixes
+
+* Add requires python &gt;=3.11 ([#28](https://github.com/snakemake/snakemake-storage-plugin-xrootd/issues/28)) ([912761c](https://github.com/snakemake/snakemake-storage-plugin-xrootd/commit/912761c783cd46fccd956ce6f7b8b0e6d3ac9499))
+
+
+### Miscellaneous Chores
+
+* release 0.2.0 ([b5d6f0e](https://github.com/snakemake/snakemake-storage-plugin-xrootd/commit/b5d6f0ef525079bece0830a734bc06881ff8a4c5))
+
 ## [0.1.9](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.1.8...v0.1.9) (2025-03-12)
 
 
