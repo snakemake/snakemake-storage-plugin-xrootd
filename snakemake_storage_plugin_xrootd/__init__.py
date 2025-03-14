@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 import os
+import re
 from typing import Any, Iterable, Optional, List, Type, Callable
 
 from reretry import retry
@@ -244,7 +245,12 @@ class StorageProvider(StorageProviderBase):
         # and considered valid. The wildcards will be resolved before the storage
         # object is actually used.
         url = URL(query)
-        if not url.is_valid():
+        # XRootD URL.is_valid() is very permissive so regex to be safe
+        if (
+            not url.is_valid()
+            or re.findall(r"((?:[A-Za-z]+://)[A-Za-z0-9:@\_\-\.]+\:?/)(.+)", query)
+            == []
+        ):
             return StorageQueryValidationResult(
                 valid=False,
                 reason="Malformed XRootD url",
