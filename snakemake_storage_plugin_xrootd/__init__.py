@@ -246,7 +246,7 @@ class StorageProvider(StorageProviderBase):
         # object is actually used.
         url = URL(query)
         # XRootD URL.is_valid() is very permissive so regex to be safe
-        if not url.is_valid() or re.findall(r"((?:[A-Za-z]+://))(.+)", str(url)) == []:
+        if not url.is_valid() or re.findall(r"((?:[A-Za-z]+://))(.+)", query) == []:
             return StorageQueryValidationResult(
                 valid=False,
                 reason="Malformed XRootD url",
