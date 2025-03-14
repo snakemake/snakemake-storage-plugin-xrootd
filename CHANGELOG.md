@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.2.1...v0.3.0) (2025-03-14)
+
+
+### Features
+
+* Implement new safe_print method ([#32](https://github.com/snakemake/snakemake-storage-plugin-xrootd/issues/32)) ([a72941c](https://github.com/snakemake/snakemake-storage-plugin-xrootd/commit/a72941c903266a92c38352e1df87bcd0e7f9f7b2))
+
 ## [0.2.1](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.2.0...v0.2.1) (2025-03-14)
 
 
