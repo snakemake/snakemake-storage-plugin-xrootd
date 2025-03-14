@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.2.0...v0.2.1) (2025-03-14)
+
+
+### Bug Fixes
+
+* Prevent XRootD marking http/https queries as valid ([#30](https://github.com/snakemake/snakemake-storage-plugin-xrootd/issues/30)) ([b0f8d6f](https://github.com/snakemake/snakemake-storage-plugin-xrootd/commit/b0f8d6fccb60b1e570dd5e03ce20f31cd4839915))
+
 ## [0.2.0](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.1.9...v0.2.0) (2025-03-12)
 
 
