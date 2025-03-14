@@ -250,6 +250,10 @@ class StorageProvider(StorageProviderBase):
                 reason="Malformed XRootD url",
                 query=query,
             )
+        if url.protocol in ["http", "https"]:
+            return StorageQueryValidationResult(
+                valid=False, reason="Protocol cannot be http or https", query=query
+            )
         return StorageQueryValidationResult(valid=True, query=query)
 
     def postprocess_query(self, query: str) -> str:
