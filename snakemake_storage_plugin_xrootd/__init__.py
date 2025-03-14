@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 import os
 import re
-from typing import Any, Iterable, Optional, List, Type, Callable
+from typing import Any, Iterable, Optional, List, Type
 
 from reretry import retry
 
