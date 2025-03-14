@@ -13,7 +13,6 @@ dependencies = [
   "snakemake-interface-common >=1.15.0,<2",
   "snakemake-interface-storage-plugins >=3,<4",
   "xrootd >=5.6,<6",
-  "snakemake >=8.18,<9"
 ]
 
 [project.urls]
@@ -48,3 +47,6 @@ test = { features = ["test"], solve-group = "default" }
 test = "pytest -vv tests/tests.py"
 test-coverage = "coverage run -m pytest -vv tests/tests.py"
 coverage-report = "coverage report"
+
+[tool.pixi.feature.test.dependencies]
+snakemake = ">=8.30.0,<9"
