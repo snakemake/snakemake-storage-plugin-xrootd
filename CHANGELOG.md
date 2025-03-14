@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.3.1...v0.3.2) (2025-03-14)
+
+
+### Bug Fixes
+
+* Ensure query is tested rather than url ([#36](https://github.com/snakemake/snakemake-storage-plugin-xrootd/issues/36)) ([1b3646a](https://github.com/snakemake/snakemake-storage-plugin-xrootd/commit/1b3646a5308f392cb47a1560a9a3a0971031f0c1))
+
 ## [0.3.1](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.3.0...v0.3.1) (2025-03-14)
 
 
