@@ -84,10 +84,14 @@ class StorageProviderSettings(StorageProviderSettingsBase):
             "required": False,
         },
     )
-    url_decorator: Optional[Callable] = field(
+    url_decorator: Optional[str] = field(
         default=None,
         metadata={
-            "help": "A function to decorate the URL e.g. wrapping an auth token.",
+            "help": (
+                "A Python expression (given as str) to decorate the URL (which is "
+                "available as variable `url` in the expression) e.g. to decorate it "
+                "with an auth token."
+            ),
             "env_var": False,
             "required": False,
         },
@@ -107,7 +111,6 @@ class StorageProvider(StorageProviderBase):
             )
         self.host = self.settings.host
         self.port = self.settings.port
-        self.url_decorator = self.settings.url_decorator or (lambda x: x)
         # List of error codes that there is no point in retrying
         self.no_retry_codes = [
             3000,
@@ -126,6 +129,11 @@ class StorageProvider(StorageProviderBase):
             3031,
             3032,
         ]
+
+    def url_decorator(self, url: str) -> str:
+        if self.settings.url_decorator is not None:
+            return eval(self.settings.url_decorator, {"url": url})
+        return url
 
     def _check_status(self, status: XRootDStatus, error_preamble: str):
         if not status.ok:
