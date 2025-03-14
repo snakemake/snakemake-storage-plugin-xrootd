@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.3.2...v0.4.0) (2025-03-14)
+
+
+### Features
+
+* provide url decorator as python expression str, not function ([#40](https://github.com/snakemake/snakemake-storage-plugin-xrootd/issues/40)) ([8f7cbae](https://github.com/snakemake/snakemake-storage-plugin-xrootd/commit/8f7cbaee60e8c75e7579ccc8729d8716572a2971))
+
+
+### Bug Fixes
+
+* remove snakemake from dependencies and add a test dependency ([#38](https://github.com/snakemake/snakemake-storage-plugin-xrootd/issues/38)) ([a9aadbb](https://github.com/snakemake/snakemake-storage-plugin-xrootd/commit/a9aadbb1ef7a9e68f86d1c15bb55f5aad6925f28))
+
 ## [0.3.2](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.3.1...v0.3.2) (2025-03-14)
 
 
