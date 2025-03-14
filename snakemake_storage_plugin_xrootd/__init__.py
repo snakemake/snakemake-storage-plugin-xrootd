@@ -245,10 +245,13 @@ class StorageProvider(StorageProviderBase):
         # and considered valid. The wildcards will be resolved before the storage
         # object is actually used.
         url = URL(query)
+        parsed_url, _, _ = cls._parse_url(query)
         # XRootD URL.is_valid() is very permissive so regex to be safe
         if (
             not url.is_valid()
-            or re.findall(r"((?:[A-Za-z]+://)[A-Za-z0-9:@\_\-\.]+\:?/)(.+)", query)
+            or re.findall(
+                r"((?:[A-Za-z]+://)[A-Za-z0-9:@\_\-\.]+\:?/)(.+)", str(parsed_url)
+            )
             == []
         ):
             return StorageQueryValidationResult(
