@@ -261,6 +261,9 @@ class StorageProvider(StorageProviderBase):
         url, _, _ = self._parse_url(query)
         return str(url)
 
+    def safe_print(self, query: str) -> str:
+        return StorageProvider._safe_to_print_url(query)
+
 
 # Required:
 # Implementation of storage object. If certain methods cannot be supported by your
