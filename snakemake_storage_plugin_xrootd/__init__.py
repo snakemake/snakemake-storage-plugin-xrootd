@@ -88,9 +88,10 @@ class StorageProviderSettings(StorageProviderSettingsBase):
         default=None,
         metadata={
             "help": (
-                "A Python expression (given as str) to decorate the URL (which is "
-                "available as variable `url` in the expression) e.g. to decorate it "
-                "with an auth token."
+                "Python code (given as str) to decorate the URL (which is "
+                "available as variable `url` which will run through `exec`"
+                "and must put the new URL in a variable `new_url`) e.g. to"
+                "decorate it with an auth token."
             ),
             "env_var": False,
             "required": False,
@@ -132,7 +133,9 @@ class StorageProvider(StorageProviderBase):
 
     def url_decorator(self, url: str) -> str:
         if self.settings.url_decorator is not None:
-            return eval(self.settings.url_decorator, {"url": url})
+            local_vars = {}
+            exec(self.settings.url_decorator, {"url": url}, local_vars)
+            return local_vars["new_url"]
         return url
 
     def _check_status(self, status: XRootDStatus, error_preamble: str):

@@ -58,5 +58,5 @@ class TestStorage(TestStorageBase):
         return StorageProviderSettings(
             host="localhost",
             port=XROOTD_TEST_PORT,
-            url_decorator="url + '?authz=anonymous'",
+            url_decorator="new_url = url + '?authz=anonymous'",
         )
