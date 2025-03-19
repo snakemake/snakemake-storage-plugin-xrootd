@@ -48,5 +48,5 @@ test = "pytest -vv tests/tests.py"
 test-coverage = "coverage run -m pytest -vv tests/tests.py"
 coverage-report = "coverage report"
 
-[tool.pixi.feature.test.dependencies]
-snakemake = ">=8.30.0,<9"
+[tool.pixi.feature.test.pypi-dependencies]
+snakemake = ">=9.0.1,<10"
