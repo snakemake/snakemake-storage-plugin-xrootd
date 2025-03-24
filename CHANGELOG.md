@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.4.0...v0.4.1) (2025-03-24)
+
+
+### Bug Fixes
+
+* adapt to interface	version	4.0 ([18e2b5d](https://github.com/snakemake/snakemake-storage-plugin-xrootd/commit/18e2b5d96d9a6c8b9bd52ed0a1610c6e5f7dd566))
+
 ## [0.4.0](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.3.2...v0.4.0) (2025-03-14)
 
 
