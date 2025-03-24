@@ -11,7 +11,7 @@ authors = [
 readme = "README.md"
 dependencies = [
   "snakemake-interface-common >=1.15.0,<2",
-  "snakemake-interface-storage-plugins >=4.0.1,<5",
+  "snakemake-interface-storage-plugins >=4.1.0,<5",
   "xrootd >=5.6,<6",
 ]
 
@@ -48,5 +48,5 @@ test = "pytest -vv tests/tests.py"
 test-coverage = "coverage run -m pytest -vv tests/tests.py"
 coverage-report = "coverage report"
 
-[tool.pixi.feature.test.dependencies]
+[tool.pixi.feature.test.pypi-dependencies]
 snakemake = ">=9.1.0,<10"
