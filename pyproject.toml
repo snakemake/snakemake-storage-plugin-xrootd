@@ -49,4 +49,4 @@ test-coverage = "coverage run -m pytest -vv tests/tests.py"
 coverage-report = "coverage report"
 
 [tool.pixi.feature.test.dependencies]
-snakemake = ">=8.30.0,<9"
+snakemake = ">=9.0.0,<10"
