@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 import os
 import re
 from typing import Any, Iterable, Optional, List, Type
+import importlib
 
 from reretry import retry
 
@@ -88,10 +89,9 @@ class StorageProviderSettings(StorageProviderSettingsBase):
         default=None,
         metadata={
             "help": (
-                "Python code (given as str) to decorate the URL (which is "
-                "available as variable `url` which will run through `exec`"
-                "and must put the new URL in a variable `new_url`) e.g. to"
-                "decorate it with an auth token."
+                "Entry point to a function that expects a single string"
+                "argument (URL) and returns the decorated URL as a string,"
+                "e.g. `url_decorator='apd.snakemake:url_decorator'`."
             ),
             "env_var": False,
             "required": False,
@@ -130,12 +130,18 @@ class StorageProvider(StorageProviderBase):
             3031,
             3032,
         ]
+        self.dec_func = None
+        if self.settings.url_decorator is not None:
+            self.dec_func = self.load_decorator()
+
+    def load_decorator(self):
+        module_name, func_name = self.settings.url_decorator.split(":")
+        module = importlib.import_module(module_name)
+        return getattr(module, func_name)
 
     def url_decorator(self, url: str) -> str:
-        if self.settings.url_decorator is not None:
-            local_vars = {}
-            exec(self.settings.url_decorator, {"url": url}, local_vars)
-            return local_vars["new_url"]
+        if self.dec_func is not None:
+            return self.dec_func(url)
         return url
 
     def _check_status(self, status: XRootDStatus, error_preamble: str):
