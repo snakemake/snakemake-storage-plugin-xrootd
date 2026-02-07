@@ -89,9 +89,10 @@ class StorageProviderSettings(StorageProviderSettingsBase):
         default=None,
         metadata={
             "help": (
-                "Entry point to a function that expects a single string"
-                "argument (URL) and returns the decorated URL as a string,"
-                "e.g. `url_decorator='apd.snakemake:url_decorator'`."
+                "Entry point to a function (e.g. 'module:func') or a Python "
+                "expression (e.g. 'url + \"?foo=bar\"') that decorates the URL. "
+                "Function expects a single string argument (URL) and returns "
+                "the decorated URL. Expression has 'url' available."
             ),
             "env_var": False,
             "required": False,
@@ -135,13 +136,30 @@ class StorageProvider(StorageProviderBase):
             self.dec_func = self.load_decorator()
 
     def load_decorator(self):
-        module_name, func_name = self.settings.url_decorator.split(":")
-        module = importlib.import_module(module_name)
-        return getattr(module, func_name)
+        if (
+            self.settings.url_decorator is not None
+            and ":" in self.settings.url_decorator
+        ):
+            try:
+                module_name, func_name = self.settings.url_decorator.split(":", 1)
+                module = importlib.import_module(module_name)
+                return getattr(module, func_name)
+            except (ImportError, AttributeError) as e:
+                get_logger().warning(
+                    f"Failed to load url_decorator entry point '{self.settings.url_decorator}': {e}"
+                )
+                return None
+        return None
 
     def url_decorator(self, url: str) -> str:
         if self.dec_func is not None:
             return self.dec_func(url)
+        if (
+            self.settings.url_decorator is not None
+            and ":" not in self.settings.url_decorator
+        ):
+            # Fallback for backwards compatibility (eval)
+            return eval(self.settings.url_decorator, {"url": url})
         return url
 
     def _check_status(self, status: XRootDStatus, error_preamble: str):
