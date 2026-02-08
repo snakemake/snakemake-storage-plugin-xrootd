@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.4.1...v1.0.0) (2026-02-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* Move URL decorator to use entry point instead of eval ([#42](https://github.com/snakemake/snakemake-storage-plugin-xrootd/issues/42))
+
+### Bug Fixes
+
+* Move URL decorator to use entry point instead of eval ([#42](https://github.com/snakemake/snakemake-storage-plugin-xrootd/issues/42)) ([d4e9bfb](https://github.com/snakemake/snakemake-storage-plugin-xrootd/commit/d4e9bfb0c65b0616c7424e20bf8059b6c21dde53))
+
 ## [0.4.1](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.4.0...v0.4.1) (2025-03-24)
 
 
