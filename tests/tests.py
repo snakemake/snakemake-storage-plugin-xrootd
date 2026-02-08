@@ -58,5 +58,28 @@ class TestStorage(TestStorageBase):
         return StorageProviderSettings(
             host="localhost",
             port=XROOTD_TEST_PORT,
+            url_decorator="test_decorators:add_decorator",
+        )
+
+
+class TestStorageEval(TestStorageBase):
+    __test__ = True
+    retrieve_only = False
+    store_only = False
+    delete = True
+
+    def get_query(self, tmp_path) -> str:
+        return "root://tmp/test_eval.txt"
+
+    def get_query_not_existing(self, tmp_path) -> str:
+        return "root://tmp/test_eval_not_existing.txt"
+
+    def get_storage_provider_cls(self) -> Type[StorageProviderBase]:
+        return StorageProvider
+
+    def get_storage_provider_settings(self) -> Optional[StorageProviderSettingsBase]:
+        return StorageProviderSettings(
+            host="localhost",
+            port=XROOTD_TEST_PORT,
             url_decorator="url + '?authz=anonymous'",
         )

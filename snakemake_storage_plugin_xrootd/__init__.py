@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 import os
 import re
 from typing import Any, Iterable, Optional, List, Type
+import importlib
 
 from reretry import retry
 
@@ -88,9 +89,10 @@ class StorageProviderSettings(StorageProviderSettingsBase):
         default=None,
         metadata={
             "help": (
-                "A Python expression (given as str) to decorate the URL (which is "
-                "available as variable `url` in the expression) e.g. to decorate it "
-                "with an auth token."
+                "Entry point to a function (e.g. 'module:func') or a Python "
+                "expression (e.g. 'url + \"?foo=bar\"') that decorates the URL. "
+                "Function expects a single string argument (URL) and returns "
+                "the decorated URL. Expression has 'url' available."
             ),
             "env_var": False,
             "required": False,
@@ -129,9 +131,34 @@ class StorageProvider(StorageProviderBase):
             3031,
             3032,
         ]
+        self.dec_func = None
+        if self.settings.url_decorator is not None:
+            self.dec_func = self.load_decorator()
+
+    def load_decorator(self):
+        if (
+            self.settings.url_decorator is not None
+            and ":" in self.settings.url_decorator
+        ):
+            try:
+                module_name, func_name = self.settings.url_decorator.split(":", 1)
+                module = importlib.import_module(module_name)
+                return getattr(module, func_name)
+            except (ImportError, AttributeError) as e:
+                get_logger().warning(
+                    f"Failed to load url_decorator entry point '{self.settings.url_decorator}': {e}"
+                )
+                return None
+        return None
 
     def url_decorator(self, url: str) -> str:
-        if self.settings.url_decorator is not None:
+        if self.dec_func is not None:
+            return self.dec_func(url)
+        if (
+            self.settings.url_decorator is not None
+            and ":" not in self.settings.url_decorator
+        ):
+            # Fallback for backwards compatibility (eval)
             return eval(self.settings.url_decorator, {"url": url})
         return url
 
