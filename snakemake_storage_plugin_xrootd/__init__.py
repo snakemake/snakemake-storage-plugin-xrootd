@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 import os
 import re
+from urllib.parse import quote
 from typing import Any, Iterable, Optional, List, Type
 import importlib
 
@@ -82,6 +83,18 @@ class StorageProviderSettings(StorageProviderSettingsBase):
             "password in plaintext as part of the XRootD URLs used in the "
             "inputs/outputs of jobs.",
             "env_var": True,
+            "required": False,
+        },
+    )
+    protocol: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Preferred XRootD authentication protocol(s), passed through "
+                "to the client unchanged. Comma-separated values such as "
+                "'krb5,unix' are allowed."
+            ),
+            "env_var": False,
             "required": False,
         },
     )
@@ -223,6 +236,11 @@ class StorageProvider(StorageProviderBase):
     def _safe_to_print_url(url: str) -> str:
         return StorageProvider._no_params_url(StorageProvider._no_pass_url(url))
 
+    @staticmethod
+    def _append_query_param(url: str, key: str, value: str) -> str:
+        sep = "&" if "?" in url else "?"
+        return f"{url}{sep}{key}={quote(value, safe=',')}"
+
     def _parse_url(self, query: str) -> List[str] | None:
         url = URL(query)
         user = self.username or url.username
@@ -250,6 +268,10 @@ class StorageProvider(StorageProviderBase):
         else:
             full_path = url.path_with_params
         new_url = f"{url.protocol}://{user_pass}{host}:{port}/{full_path}"
+        if self.settings.protocol:
+            new_url = self._append_query_param(
+                new_url, "xrd.wantprot", self.settings.protocol
+            )
         dec_url = self.url_decorator(new_url)
         full_url = URL(dec_url)
         if not full_url.is_valid():
@@ -316,7 +338,7 @@ class StorageObject(StorageObjectRead, StorageObjectWrite):
         # Does is_valid_query happen before this or we need to verify here too?
         self.url, self.dirname, self.filename = self.provider._parse_url(self.query)
         self.path = self.url.path
-        self.file_system = client.FileSystem(self.url.hostid)
+        self.file_system = client.FileSystem(str(self.url))
 
     # TODO
     async def inventory(self, cache: IOCacheStorageInterface):
