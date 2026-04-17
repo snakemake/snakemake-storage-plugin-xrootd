@@ -1,8 +1,10 @@
 import subprocess
 import time
+from pathlib import Path
 from typing import Optional, Type
 
 import pytest
+from snakemake_interface_common.logging import get_logger
 from snakemake_interface_storage_plugins.tests import TestStorageBase
 from snakemake_interface_storage_plugins.storage_provider import StorageProviderBase
 from snakemake_interface_storage_plugins.settings import StorageProviderSettingsBase
@@ -11,6 +13,16 @@ from snakemake_storage_plugin_xrootd import StorageProvider, StorageProviderSett
 import socket
 
 XROOTD_TEST_PORT = 32293
+
+
+def make_provider(settings: StorageProviderSettings) -> StorageProvider:
+    return StorageProvider(
+        local_prefix=Path(".tests-local"),
+        logger=get_logger(),
+        settings=settings,
+        keep_local=False,
+        is_default=False,
+    )
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -83,3 +95,49 @@ class TestStorageEval(TestStorageBase):
             port=XROOTD_TEST_PORT,
             url_decorator="url + '?authz=anonymous'",
         )
+
+
+def test_postprocess_query_adds_protocol_preference():
+    provider = make_provider(StorageProviderSettings(protocol="krb5"))
+
+    query = provider.postprocess_query("root://host//test.txt")
+
+    assert query == "root://host:1094//test.txt?xrd.wantprot=krb5"
+
+
+def test_postprocess_query_supports_multiple_protocols():
+    provider = make_provider(StorageProviderSettings(protocol="krb5,unix"))
+
+    query = provider.postprocess_query("root://host//test.txt")
+
+    assert query == "root://host:1094//test.txt?xrd.wantprot=krb5,unix"
+
+
+def test_postprocess_query_preserves_existing_params():
+    provider = make_provider(StorageProviderSettings(protocol="krb5,unix"))
+
+    query = provider.postprocess_query("root://host//test.txt?authz=anonymous")
+
+    assert query == "root://host:1094//test.txt?authz=anonymous&xrd.wantprot=krb5,unix"
+
+
+def test_protocol_is_added_before_url_decorator():
+    provider = make_provider(
+        StorageProviderSettings(
+            protocol="krb5,unix",
+            url_decorator="test_decorators:add_query_aware_decorator",
+        )
+    )
+
+    query = provider.postprocess_query("root://host//test.txt")
+
+    assert "xrd.wantprot=krb5,unix" in query
+    assert "saw_query=yes" in query
+
+
+def test_safe_print_redacts_protocol_query_param():
+    provider = make_provider(StorageProviderSettings(protocol="krb5,unix"))
+
+    query = provider.postprocess_query("root://host//test.txt")
+
+    assert provider.safe_print(query) == "root://host:1094//test.txt?****"
