@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.urls]
-"Source code" = "https://github.com/snakemake/snakemake-storage-plugin-xrootd"
+Repository = "https://github.com/snakemake/snakemake-storage-plugin-xrootd"
 Documentation = "https://snakemake.github.io/snakemake-plugin-catalog/plugins/storage/xrootd.html"
 
 [build-system]
