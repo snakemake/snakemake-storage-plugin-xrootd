@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v1.0.0...v1.1.0) (2026-04-17)
+
+
+### Features
+
+* add XRootD protocol preference support ([#45](https://github.com/snakemake/snakemake-storage-plugin-xrootd/issues/45)) ([39cbbc1](https://github.com/snakemake/snakemake-storage-plugin-xrootd/commit/39cbbc1f35d37536a88b62bfb07651e7174254de))
+
+
+### Bug Fixes
+
+* Rename 'Source code' to 'Repository' in project.urls ([#46](https://github.com/snakemake/snakemake-storage-plugin-xrootd/issues/46)) ([be67a9d](https://github.com/snakemake/snakemake-storage-plugin-xrootd/commit/be67a9d0a668fa61cc91887be328274e6428edf5)), closes [#11](https://github.com/snakemake/snakemake-storage-plugin-xrootd/issues/11)
+
 ## [1.0.0](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v0.4.1...v1.0.0) (2026-02-08)
 
 
