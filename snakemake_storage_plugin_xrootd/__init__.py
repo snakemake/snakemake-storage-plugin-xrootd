@@ -503,10 +503,23 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
         # prefix of the query before the first wildcard.
         url, _, _ = self.provider._parse_url(self.query)
         const_prefix = os.path.split(get_constant_prefix(url.path))[0]
-        glob_query = str(url).replace(url.path, const_prefix)
+        glob_query = self._url_with_new_path(str(url), const_prefix)
         return self._list_recursive(glob_query)
 
-    @xrootd_retry
+    @staticmethod
+    def _url_with_new_path(url: str, new_path: str) -> str:
+        parsed = URL(url)
+        parsed_params = parsed.path_with_params[len(parsed.path) :]
+
+        new_url = (
+            parsed.protocol + "://" + parsed.hostid + "/" + new_path + parsed_params
+        )
+        if not URL(new_url).is_valid():
+            raise WorkflowError(
+                f"XRootD Error: URL {StorageProvider._safe_to_print_url(new_url)} is invalid"
+            )
+        return new_url
+
     def _list_recursive(self, query: str, _depth: int = 0) -> Iterable[str]:
         if _depth > self.provider.settings.glob_wildcards_max_depth:
             raise XRootDFatalException(
@@ -554,8 +567,8 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
                 )
                 continue
 
-            child_query = query.replace(
-                url.path, url.path.rstrip("/") + "/" + entry.name
+            child_query = self._url_with_new_path(
+                str(url), url.path.rstrip("/") + "/" + entry.name
             )
             if (
                 entry.statinfo is not None
