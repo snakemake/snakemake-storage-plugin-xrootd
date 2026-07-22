@@ -8,7 +8,7 @@ import importlib
 from reretry import retry
 
 from XRootD import client
-from XRootD.client.flags import MkDirFlags, StatInfoFlags
+from XRootD.client.flags import DirListFlags, MkDirFlags, StatInfoFlags
 from XRootD.client.responses import XRootDStatus
 from XRootD.client import URL
 
@@ -26,9 +26,12 @@ from snakemake_interface_storage_plugins.storage_provider import (  # noqa: F401
 from snakemake_interface_storage_plugins.storage_object import (
     StorageObjectRead,
     StorageObjectWrite,
-    retry_decorator,
+    StorageObjectGlob,
 )
-from snakemake_interface_storage_plugins.io import IOCacheStorageInterface
+from snakemake_interface_storage_plugins.io import (
+    IOCacheStorageInterface,
+    get_constant_prefix,
+)
 
 
 class XRootDFatalException(Exception):
@@ -106,6 +109,18 @@ class StorageProviderSettings(StorageProviderSettingsBase):
                 "expression (e.g. 'url + \"?foo=bar\"') that decorates the URL. "
                 "Function expects a single string argument (URL) and returns "
                 "the decorated URL. Expression has 'url' available."
+            ),
+            "env_var": False,
+            "required": False,
+        },
+    )
+    glob_wildcards_max_depth: int = field(
+        default=100,
+        metadata={
+            "help": (
+                "Maximum directory nesting depth when calling `glob_wildcards`."
+                "Guards against symlink loops or misbehaving servers causing "
+                "unbounded recursion."
             ),
             "env_var": False,
             "required": False,
@@ -329,7 +344,7 @@ class StorageProvider(StorageProviderBase):
 # storage (e.g. because it is read-only see
 # snakemake-storage-http for comparison), remove the corresponding base classes
 # from the list of inherited items.
-class StorageObject(StorageObjectRead, StorageObjectWrite):
+class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
     # For compatibility with future changes, you should not overwrite the __init__
     # method. Instead, use __post_init__ to set additional attributes and initialize
     # futher stuff.
@@ -479,13 +494,74 @@ class StorageObject(StorageObjectRead, StorageObjectWrite):
     # The following to methods are only required if the class inherits from
     # StorageObjectGlob.
 
-    # TODO
-    @retry_decorator
+    @xrootd_retry
     def list_candidate_matches(self) -> Iterable[str]:
         """Return a list of candidate matches in the storage for the query."""
         # This is used by glob_wildcards() to find matches for wildcards in the query.
         # The method has to return concretized queries without any remaining wildcards.
         # Use snakemake_executor_plugins.io.get_constant_prefix(self.query) to get the
         # prefix of the query before the first wildcard.
-        # TODO add support for listing files here
-        raise NotImplementedError()
+        url, _, _ = self.provider._parse_url(self.query)
+        const_prefix = os.path.split(get_constant_prefix(url.path))[0]
+        glob_query = str(url).replace(url.path, const_prefix)
+        return self._list_recursive(glob_query)
+
+    @xrootd_retry
+    def _list_recursive(self, query: str, _depth: int = 0) -> Iterable[str]:
+        if _depth > self.provider.settings.glob_wildcards_max_depth:
+            raise XRootDFatalException(
+                "XRootD Error: directory nesting exceeds maximum depth of "
+                f"{self.provider.settings.glob_wildcards_max_depth} while listing "
+                f"{self.provider._safe_to_print_url(query)}"
+            )
+
+        url = URL(query)
+        # First check if the path is a directory or a file. If it is a file, we can
+        # return it directly. (Only need to do this for the first call, since we check
+        # it before recursing into subdirectories.)
+        if _depth == 0:
+            stat_status, stat_info = self.file_system.stat(url.path_with_params)
+            self.provider._check_status(
+                stat_status,
+                f"Error checking info of {self.provider._safe_to_print_url(query)}",
+            )
+            if not stat_info.flags & StatInfoFlags.IS_DIR:
+                return [query]
+
+        status, dirlist = self.file_system.dirlist(
+            url.path_with_params, DirListFlags.STAT
+        )
+
+        self.provider._check_status(
+            status,
+            f"Error listing directory {self.provider._safe_to_print_url(query)}",
+        )
+
+        matches = []
+        for entry in dirlist.dirlist:
+            # Dirlist should never return entries with empty names or "." or ".." or
+            # names containing slashes, but we check for that anyway to be safe.
+            if (
+                not entry.name
+                or entry.name in (".", "..")
+                or "/" in entry.name
+                or "\\" in entry.name
+            ):
+                get_logger().warning(
+                    "Skipping suspicious directory entry name "
+                    f"{entry.name!r} returned while listing "
+                    f"{self.provider._safe_to_print_url(query)}"
+                )
+                continue
+
+            child_query = query.replace(
+                url.path, url.path.rstrip("/") + "/" + entry.name
+            )
+            if (
+                entry.statinfo is not None
+                and entry.statinfo.flags & StatInfoFlags.IS_DIR
+            ):
+                matches.extend(self._list_recursive(child_query, _depth + 1))
+            else:
+                matches.append(child_query)
+        return matches
