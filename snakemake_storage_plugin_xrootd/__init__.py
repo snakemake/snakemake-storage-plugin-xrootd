@@ -9,7 +9,7 @@ from reretry import retry
 
 from XRootD import client
 from XRootD.client.flags import DirListFlags, MkDirFlags, StatInfoFlags
-from XRootD.client.responses import XRootDStatus
+from XRootD.client.responses import XRootDStatus, StatInfo, DirectoryList
 from XRootD.client import URL
 
 from snakemake.exceptions import WorkflowError
@@ -406,25 +406,24 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
             )
         return True
 
-    @xrootd_retry
     def mtime(self) -> float:
         # return the modification time
-        status, stat = self.file_system.stat(self.url.path_with_params)
-        self.provider._check_status(
-            status,
-            f"Error checking info of {self.provider._safe_to_print_url(self.query)}",
-        )
+        stat = self._stat(self.url.path_with_params)
         return stat.modtime
 
-    @xrootd_retry
     def size(self) -> int:
         # return the size in bytes
-        status, stat = self.file_system.stat(self.url.path_with_params)
+        stat = self._stat(self.url.path_with_params)
+        return stat.size
+
+    @xrootd_retry
+    def _stat(self, path_with_params: str) -> StatInfo:
+        status, stat_info = self.file_system.stat(path_with_params)
         self.provider._check_status(
             status,
             f"Error checking info of {self.provider._safe_to_print_url(self.query)}",
         )
-        return stat.size
+        return stat_info
 
     @xrootd_retry
     def retrieve_object(self):
@@ -482,19 +481,19 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
     @xrootd_retry
     def remove(self):
         # Remove the object from the storage.
-        status, stat = self.file_system.stat(self.path)
-        self.provider._check_status(status, f"Error could not stat {self.path}")
+        stat = self._stat(self.url.path_with_params)
         if stat.flags & StatInfoFlags.IS_DIR:
             rm_func = self.file_system.rmdir
         else:
             rm_func = self.file_system.rm
-        status, _ = rm_func(self.path)
-        self.provider._check_status(status, f"Error removing {self.path}")
+        status, _ = rm_func(self.url.path_with_params)
+        self.provider._check_status(
+            status, f"Error removing {self.provider._safe_to_print_url(self.query)}"
+        )
 
     # The following to methods are only required if the class inherits from
     # StorageObjectGlob.
 
-    @xrootd_retry
     def list_candidate_matches(self) -> Iterable[str]:
         """Return a list of candidate matches in the storage for the query."""
         # This is used by glob_wildcards() to find matches for wildcards in the query.
@@ -504,7 +503,7 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
         url, _, _ = self.provider._parse_url(self.query)
         const_prefix = os.path.split(get_constant_prefix(url.path))[0]
         glob_query = self._url_with_new_path(str(url), const_prefix)
-        return self._list_recursive(glob_query)
+        yield from self._list_recursive(glob_query)
 
     @staticmethod
     def _url_with_new_path(url: str, new_path: str) -> str:
@@ -520,9 +519,18 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
             )
         return new_url
 
+    @xrootd_retry
+    def _dirlist(self, path_with_params: str) -> DirectoryList:
+        status, dirlist = self.file_system.dirlist(path_with_params, DirListFlags.STAT)
+        self.provider._check_status(
+            status,
+            f"Error listing directory {self.provider._safe_to_print_url(self.query)}",
+        )
+        return dirlist
+
     def _list_recursive(self, query: str, _depth: int = 0) -> Iterable[str]:
         if _depth > self.provider.settings.glob_wildcards_max_depth:
-            raise XRootDFatalException(
+            raise WorkflowError(
                 "XRootD Error: directory nesting exceeds maximum depth of "
                 f"{self.provider.settings.glob_wildcards_max_depth} while listing "
                 f"{self.provider._safe_to_print_url(query)}"
@@ -533,24 +541,13 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
         # return it directly. (Only need to do this for the first call, since we check
         # it before recursing into subdirectories.)
         if _depth == 0:
-            stat_status, stat_info = self.file_system.stat(url.path_with_params)
-            self.provider._check_status(
-                stat_status,
-                f"Error checking info of {self.provider._safe_to_print_url(query)}",
-            )
+            stat_info = self._stat(url.path_with_params)
             if not stat_info.flags & StatInfoFlags.IS_DIR:
-                return [query]
+                yield query
+                return
 
-        status, dirlist = self.file_system.dirlist(
-            url.path_with_params, DirListFlags.STAT
-        )
+        dirlist = self._dirlist(url.path_with_params)
 
-        self.provider._check_status(
-            status,
-            f"Error listing directory {self.provider._safe_to_print_url(query)}",
-        )
-
-        matches = []
         for entry in dirlist.dirlist:
             # Dirlist should never return entries with empty names or "." or ".." or
             # names containing slashes, but we check for that anyway to be safe.
@@ -574,7 +571,6 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
                 entry.statinfo is not None
                 and entry.statinfo.flags & StatInfoFlags.IS_DIR
             ):
-                matches.extend(self._list_recursive(child_query, _depth + 1))
+                yield from self._list_recursive(child_query, _depth + 1)
             else:
-                matches.append(child_query)
-        return matches
+                yield child_query
