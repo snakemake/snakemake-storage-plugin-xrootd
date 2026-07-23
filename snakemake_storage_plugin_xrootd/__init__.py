@@ -118,7 +118,7 @@ class StorageProviderSettings(StorageProviderSettingsBase):
         default=100,
         metadata={
             "help": (
-                "Maximum directory nesting depth when calling `glob_wildcards`."
+                "Maximum directory nesting depth when calling `glob_wildcards`. "
                 "Guards against symlink loops or misbehaving servers causing "
                 "unbounded recursion."
             ),
@@ -372,7 +372,7 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
     def get_inventory_parent(self) -> Optional[str]:
         """Return the parent directory of this object."""
         # this is optional and can be left as is
-        return str(self.url).replace(self.filename, "")
+        return self._url_with_new_path(str(self.url), self.dirname)
 
     def local_suffix(self) -> str:
         """Return a unique suffix for the local path, determined from self.query."""
@@ -388,23 +388,10 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
 
     @xrootd_retry
     def exists(self) -> bool:
-        return self._exists(self.query)
+        return self._exists(self.url.path_with_params)
 
-    def _exists(self, query) -> bool:
-        # we split up the query again so that this can be re-used to check the
-        # existence of other files e.g. the parent directory.
-        url, dirname, filename = self.provider._parse_url(query)
-        status, stat_info = self.file_system.stat(url.path_with_params)
-        # a bit special, 3011 == file not found
-        if not status.ok:
-            if status.errno == 3011:
-                return False
-            self.provider._check_status(
-                status,
-                "Error checking existence of "
-                f"{self.provider._safe_to_print_url(query)} on XRootD",
-            )
-        return True
+    def _exists(self, path_with_params: str) -> bool:
+        return self._stat(path_with_params, allow_missing=True) is not None
 
     def mtime(self) -> float:
         # return the modification time
@@ -417,8 +404,13 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
         return stat.size
 
     @xrootd_retry
-    def _stat(self, path_with_params: str) -> StatInfo:
+    def _stat(
+        self, path_with_params: str, allow_missing: bool = False
+    ) -> Optional[StatInfo]:
         status, stat_info = self.file_system.stat(path_with_params)
+        # 3011==file not found is in the no_retry_codes list, so we need to handle it here
+        if allow_missing and not status.ok and status.errno == 3011:
+            return None
         self.provider._check_status(
             status,
             f"Error checking info of {self.provider._safe_to_print_url(self.query)}",
@@ -452,7 +444,7 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
 
     @xrootd_retry
     def _makedirs(self):
-        if not self._exists(self.get_inventory_parent()):
+        if not self._exists(URL(self.get_inventory_parent()).path_with_params):
             status, _ = self.file_system.mkdir(self.dirname, MkDirFlags.MAKEPATH)
             self.provider._check_status(
                 status,
@@ -500,9 +492,8 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
         # The method has to return concretized queries without any remaining wildcards.
         # Use snakemake_executor_plugins.io.get_constant_prefix(self.query) to get the
         # prefix of the query before the first wildcard.
-        url, _, _ = self.provider._parse_url(self.query)
-        const_prefix = get_constant_prefix(url.path, strip_incomplete_parts=True)
-        glob_query = self._url_with_new_path(str(url), const_prefix)
+        const_prefix = get_constant_prefix(self.url.path, strip_incomplete_parts=True)
+        glob_query = self._url_with_new_path(str(self.url), const_prefix)
         yield from self._list_recursive(glob_query)
 
     @staticmethod
@@ -541,7 +532,10 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
         # return it directly. (Only need to do this for the first call, since we check
         # it before recursing into subdirectories.)
         if _depth == 0:
-            stat_info = self._stat(url.path_with_params)
+            stat_info = self._stat(url.path_with_params, allow_missing=True)
+            # Prefix does not exist, return nothing.
+            if stat_info is None:
+                return
             if not stat_info.flags & StatInfoFlags.IS_DIR:
                 yield query
                 return
