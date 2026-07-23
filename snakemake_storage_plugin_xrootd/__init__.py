@@ -501,7 +501,7 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
         # Use snakemake_executor_plugins.io.get_constant_prefix(self.query) to get the
         # prefix of the query before the first wildcard.
         url, _, _ = self.provider._parse_url(self.query)
-        const_prefix = os.path.split(get_constant_prefix(url.path))[0]
+        const_prefix = get_constant_prefix(url.path, strip_incomplete_parts=True)
         glob_query = self._url_with_new_path(str(url), const_prefix)
         yield from self._list_recursive(glob_query)
 

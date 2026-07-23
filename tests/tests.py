@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional, Type
 
 import pytest
+from snakemake.exceptions import WorkflowError
 from snakemake_interface_common.logging import get_logger
 from snakemake_interface_storage_plugins.tests import TestStorageBase
 from snakemake_interface_storage_plugins.storage_provider import StorageProviderBase
@@ -12,7 +13,6 @@ from snakemake_interface_storage_plugins.settings import StorageProviderSettings
 from snakemake_storage_plugin_xrootd import (
     StorageProvider,
     StorageProviderSettings,
-    XRootDFatalException,
 )
 import socket
 
@@ -186,5 +186,5 @@ def test_list_candidate_matches_respects_depth_limit(start_xrootd_server, tmp_pa
     query = f"root://localhost:{start_xrootd_server}/{tmp_path}/{{name}}.txt"
     obj = provider.object(query=query, keep_local=False, retrieve=False)
 
-    with pytest.raises(XRootDFatalException):
+    with pytest.raises(WorkflowError):
         list(obj.list_candidate_matches())
