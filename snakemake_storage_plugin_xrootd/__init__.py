@@ -355,6 +355,56 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
         self.path = self.url.path
         self.file_system = client.FileSystem(str(self.url))
 
+    @xrootd_retry
+    def _stat(
+        self, path_with_params: str, allow_missing: bool = False
+    ) -> Optional[StatInfo]:
+        status, stat_info = self.file_system.stat(path_with_params)
+        # 3011==file not found is in the no_retry_codes list, so we need to handle it here
+        if allow_missing and not status.ok and status.errno == 3011:
+            return None
+        self.provider._check_status(
+            status,
+            f"Error checking info of {self.provider._safe_to_print_url(self.query)}",
+        )
+        return stat_info
+
+    def _exists(self, path_with_params: str) -> bool:
+        return self._stat(path_with_params, allow_missing=True) is not None
+
+    @xrootd_retry
+    def _makedirs(self):
+        if not self._exists(URL(self.get_inventory_parent()).path_with_params):
+            status, _ = self.file_system.mkdir(self.dirname, MkDirFlags.MAKEPATH)
+            self.provider._check_status(
+                status,
+                "Error creating directory "
+                f"{self.provider._safe_to_print_url(self.query)}",
+            )
+
+    @staticmethod
+    def _url_with_new_path(url: str, new_path: str) -> str:
+        parsed = URL(url)
+        parsed_params = parsed.path_with_params[len(parsed.path) :]
+
+        new_url = (
+            parsed.protocol + "://" + parsed.hostid + "/" + new_path + parsed_params
+        )
+        if not URL(new_url).is_valid():
+            raise WorkflowError(
+                f"XRootD Error: URL {StorageProvider._safe_to_print_url(new_url)} is invalid"
+            )
+        return new_url
+
+    @xrootd_retry
+    def _dirlist(self, path_with_params: str) -> DirectoryList:
+        status, dirlist = self.file_system.dirlist(path_with_params, DirListFlags.STAT)
+        self.provider._check_status(
+            status,
+            f"Error listing directory {self.provider._safe_to_print_url(self.query)}",
+        )
+        return dirlist
+
     # TODO
     async def inventory(self, cache: IOCacheStorageInterface):
         """From this file, try to find as much existence and modification date
@@ -386,12 +436,8 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
         # Snakemake.
         pass
 
-    @xrootd_retry
     def exists(self) -> bool:
         return self._exists(self.url.path_with_params)
-
-    def _exists(self, path_with_params: str) -> bool:
-        return self._stat(path_with_params, allow_missing=True) is not None
 
     def mtime(self) -> float:
         # return the modification time
@@ -402,20 +448,6 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
         # return the size in bytes
         stat = self._stat(self.url.path_with_params)
         return stat.size
-
-    @xrootd_retry
-    def _stat(
-        self, path_with_params: str, allow_missing: bool = False
-    ) -> Optional[StatInfo]:
-        status, stat_info = self.file_system.stat(path_with_params)
-        # 3011==file not found is in the no_retry_codes list, so we need to handle it here
-        if allow_missing and not status.ok and status.errno == 3011:
-            return None
-        self.provider._check_status(
-            status,
-            f"Error checking info of {self.provider._safe_to_print_url(self.query)}",
-        )
-        return stat_info
 
     @xrootd_retry
     def retrieve_object(self):
@@ -441,16 +473,6 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
 
     # The following to methods are only required if the class inherits from
     # StorageObjectReadWrite.
-
-    @xrootd_retry
-    def _makedirs(self):
-        if not self._exists(URL(self.get_inventory_parent()).path_with_params):
-            status, _ = self.file_system.mkdir(self.dirname, MkDirFlags.MAKEPATH)
-            self.provider._check_status(
-                status,
-                "Error creating directory "
-                f"{self.provider._safe_to_print_url(self.query)}",
-            )
 
     @xrootd_retry
     def store_object(self):
@@ -495,29 +517,6 @@ class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
         const_prefix = get_constant_prefix(self.url.path, strip_incomplete_parts=True)
         glob_query = self._url_with_new_path(str(self.url), const_prefix)
         yield from self._list_recursive(glob_query)
-
-    @staticmethod
-    def _url_with_new_path(url: str, new_path: str) -> str:
-        parsed = URL(url)
-        parsed_params = parsed.path_with_params[len(parsed.path) :]
-
-        new_url = (
-            parsed.protocol + "://" + parsed.hostid + "/" + new_path + parsed_params
-        )
-        if not URL(new_url).is_valid():
-            raise WorkflowError(
-                f"XRootD Error: URL {StorageProvider._safe_to_print_url(new_url)} is invalid"
-            )
-        return new_url
-
-    @xrootd_retry
-    def _dirlist(self, path_with_params: str) -> DirectoryList:
-        status, dirlist = self.file_system.dirlist(path_with_params, DirListFlags.STAT)
-        self.provider._check_status(
-            status,
-            f"Error listing directory {self.provider._safe_to_print_url(self.query)}",
-        )
-        return dirlist
 
     def _list_recursive(self, query: str, _depth: int = 0) -> Iterable[str]:
         if _depth > self.provider.settings.glob_wildcards_max_depth:
