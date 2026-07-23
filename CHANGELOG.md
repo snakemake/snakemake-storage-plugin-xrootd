@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v1.1.0...v1.2.0) (2026-07-23)
+
+
+### Features
+
+* Implement `list_candidate_matches` ([#50](https://github.com/snakemake/snakemake-storage-plugin-xrootd/issues/50)) ([7b04c23](https://github.com/snakemake/snakemake-storage-plugin-xrootd/commit/7b04c23105fd51614758a05b0ab829eb48eda586))
+
 ## [1.1.0](https://github.com/snakemake/snakemake-storage-plugin-xrootd/compare/v1.0.0...v1.1.0) (2026-04-17)
 
 
