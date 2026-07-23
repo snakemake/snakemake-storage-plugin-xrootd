@@ -8,8 +8,8 @@ import importlib
 from reretry import retry
 
 from XRootD import client
-from XRootD.client.flags import MkDirFlags, StatInfoFlags
-from XRootD.client.responses import XRootDStatus
+from XRootD.client.flags import DirListFlags, MkDirFlags, StatInfoFlags
+from XRootD.client.responses import XRootDStatus, StatInfo, DirectoryList
 from XRootD.client import URL
 
 from snakemake.exceptions import WorkflowError
@@ -26,9 +26,12 @@ from snakemake_interface_storage_plugins.storage_provider import (  # noqa: F401
 from snakemake_interface_storage_plugins.storage_object import (
     StorageObjectRead,
     StorageObjectWrite,
-    retry_decorator,
+    StorageObjectGlob,
 )
-from snakemake_interface_storage_plugins.io import IOCacheStorageInterface
+from snakemake_interface_storage_plugins.io import (
+    IOCacheStorageInterface,
+    get_constant_prefix,
+)
 
 
 class XRootDFatalException(Exception):
@@ -106,6 +109,18 @@ class StorageProviderSettings(StorageProviderSettingsBase):
                 "expression (e.g. 'url + \"?foo=bar\"') that decorates the URL. "
                 "Function expects a single string argument (URL) and returns "
                 "the decorated URL. Expression has 'url' available."
+            ),
+            "env_var": False,
+            "required": False,
+        },
+    )
+    glob_wildcards_max_depth: int = field(
+        default=100,
+        metadata={
+            "help": (
+                "Maximum directory nesting depth when calling `glob_wildcards`. "
+                "Guards against symlink loops or misbehaving servers causing "
+                "unbounded recursion."
             ),
             "env_var": False,
             "required": False,
@@ -329,7 +344,7 @@ class StorageProvider(StorageProviderBase):
 # storage (e.g. because it is read-only see
 # snakemake-storage-http for comparison), remove the corresponding base classes
 # from the list of inherited items.
-class StorageObject(StorageObjectRead, StorageObjectWrite):
+class StorageObject(StorageObjectRead, StorageObjectWrite, StorageObjectGlob):
     # For compatibility with future changes, you should not overwrite the __init__
     # method. Instead, use __post_init__ to set additional attributes and initialize
     # futher stuff.
@@ -339,6 +354,56 @@ class StorageObject(StorageObjectRead, StorageObjectWrite):
         self.url, self.dirname, self.filename = self.provider._parse_url(self.query)
         self.path = self.url.path
         self.file_system = client.FileSystem(str(self.url))
+
+    @xrootd_retry
+    def _stat(
+        self, path_with_params: str, allow_missing: bool = False
+    ) -> Optional[StatInfo]:
+        status, stat_info = self.file_system.stat(path_with_params)
+        # 3011==file not found is in the no_retry_codes list, so we need to handle it here
+        if allow_missing and not status.ok and status.errno == 3011:
+            return None
+        self.provider._check_status(
+            status,
+            f"Error checking info of {self.provider._safe_to_print_url(self.query)}",
+        )
+        return stat_info
+
+    def _exists(self, path_with_params: str) -> bool:
+        return self._stat(path_with_params, allow_missing=True) is not None
+
+    @xrootd_retry
+    def _makedirs(self):
+        if not self._exists(URL(self.get_inventory_parent()).path_with_params):
+            status, _ = self.file_system.mkdir(self.dirname, MkDirFlags.MAKEPATH)
+            self.provider._check_status(
+                status,
+                "Error creating directory "
+                f"{self.provider._safe_to_print_url(self.query)}",
+            )
+
+    @staticmethod
+    def _url_with_new_path(url: str, new_path: str) -> str:
+        parsed = URL(url)
+        parsed_params = parsed.path_with_params[len(parsed.path) :]
+
+        new_url = (
+            parsed.protocol + "://" + parsed.hostid + "/" + new_path + parsed_params
+        )
+        if not URL(new_url).is_valid():
+            raise WorkflowError(
+                f"XRootD Error: URL {StorageProvider._safe_to_print_url(new_url)} is invalid"
+            )
+        return new_url
+
+    @xrootd_retry
+    def _dirlist(self, path_with_params: str) -> DirectoryList:
+        status, dirlist = self.file_system.dirlist(path_with_params, DirListFlags.STAT)
+        self.provider._check_status(
+            status,
+            f"Error listing directory {self.provider._safe_to_print_url(self.query)}",
+        )
+        return dirlist
 
     # TODO
     async def inventory(self, cache: IOCacheStorageInterface):
@@ -357,7 +422,7 @@ class StorageObject(StorageObjectRead, StorageObjectWrite):
     def get_inventory_parent(self) -> Optional[str]:
         """Return the parent directory of this object."""
         # this is optional and can be left as is
-        return str(self.url).replace(self.filename, "")
+        return self._url_with_new_path(str(self.url), self.dirname)
 
     def local_suffix(self) -> str:
         """Return a unique suffix for the local path, determined from self.query."""
@@ -371,44 +436,17 @@ class StorageObject(StorageObjectRead, StorageObjectWrite):
         # Snakemake.
         pass
 
-    @xrootd_retry
     def exists(self) -> bool:
-        return self._exists(self.query)
+        return self._exists(self.url.path_with_params)
 
-    def _exists(self, query) -> bool:
-        # we split up the query again so that this can be re-used to check the
-        # existence of other files e.g. the parent directory.
-        url, dirname, filename = self.provider._parse_url(query)
-        status, stat_info = self.file_system.stat(url.path_with_params)
-        # a bit special, 3011 == file not found
-        if not status.ok:
-            if status.errno == 3011:
-                return False
-            self.provider._check_status(
-                status,
-                "Error checking existence of "
-                f"{self.provider._safe_to_print_url(query)} on XRootD",
-            )
-        return True
-
-    @xrootd_retry
     def mtime(self) -> float:
         # return the modification time
-        status, stat = self.file_system.stat(self.url.path_with_params)
-        self.provider._check_status(
-            status,
-            f"Error checking info of {self.provider._safe_to_print_url(self.query)}",
-        )
+        stat = self._stat(self.url.path_with_params)
         return stat.modtime
 
-    @xrootd_retry
     def size(self) -> int:
         # return the size in bytes
-        status, stat = self.file_system.stat(self.url.path_with_params)
-        self.provider._check_status(
-            status,
-            f"Error checking info of {self.provider._safe_to_print_url(self.query)}",
-        )
+        stat = self._stat(self.url.path_with_params)
         return stat.size
 
     @xrootd_retry
@@ -437,16 +475,6 @@ class StorageObject(StorageObjectRead, StorageObjectWrite):
     # StorageObjectReadWrite.
 
     @xrootd_retry
-    def _makedirs(self):
-        if not self._exists(self.get_inventory_parent()):
-            status, _ = self.file_system.mkdir(self.dirname, MkDirFlags.MAKEPATH)
-            self.provider._check_status(
-                status,
-                "Error creating directory "
-                f"{self.provider._safe_to_print_url(self.query)}",
-            )
-
-    @xrootd_retry
     def store_object(self):
         # Ensure that the object is stored at the location specified by
         # self.local_path().
@@ -467,25 +495,75 @@ class StorageObject(StorageObjectRead, StorageObjectWrite):
     @xrootd_retry
     def remove(self):
         # Remove the object from the storage.
-        status, stat = self.file_system.stat(self.path)
-        self.provider._check_status(status, f"Error could not stat {self.path}")
+        stat = self._stat(self.url.path_with_params)
         if stat.flags & StatInfoFlags.IS_DIR:
             rm_func = self.file_system.rmdir
         else:
             rm_func = self.file_system.rm
-        status, _ = rm_func(self.path)
-        self.provider._check_status(status, f"Error removing {self.path}")
+        status, _ = rm_func(self.url.path_with_params)
+        self.provider._check_status(
+            status, f"Error removing {self.provider._safe_to_print_url(self.query)}"
+        )
 
     # The following to methods are only required if the class inherits from
     # StorageObjectGlob.
 
-    # TODO
-    @retry_decorator
     def list_candidate_matches(self) -> Iterable[str]:
         """Return a list of candidate matches in the storage for the query."""
         # This is used by glob_wildcards() to find matches for wildcards in the query.
         # The method has to return concretized queries without any remaining wildcards.
         # Use snakemake_executor_plugins.io.get_constant_prefix(self.query) to get the
         # prefix of the query before the first wildcard.
-        # TODO add support for listing files here
-        raise NotImplementedError()
+        const_prefix = get_constant_prefix(self.url.path, strip_incomplete_parts=True)
+        glob_query = self._url_with_new_path(str(self.url), const_prefix)
+        yield from self._list_recursive(glob_query)
+
+    def _list_recursive(self, query: str, _depth: int = 0) -> Iterable[str]:
+        if _depth > self.provider.settings.glob_wildcards_max_depth:
+            raise WorkflowError(
+                "XRootD Error: directory nesting exceeds maximum depth of "
+                f"{self.provider.settings.glob_wildcards_max_depth} while listing "
+                f"{self.provider._safe_to_print_url(query)}"
+            )
+
+        url = URL(query)
+        # First check if the path is a directory or a file. If it is a file, we can
+        # return it directly. (Only need to do this for the first call, since we check
+        # it before recursing into subdirectories.)
+        if _depth == 0:
+            stat_info = self._stat(url.path_with_params, allow_missing=True)
+            # Prefix does not exist, return nothing.
+            if stat_info is None:
+                return
+            if not stat_info.flags & StatInfoFlags.IS_DIR:
+                yield query
+                return
+
+        dirlist = self._dirlist(url.path_with_params)
+
+        for entry in dirlist.dirlist:
+            # Dirlist should never return entries with empty names or "." or ".." or
+            # names containing slashes, but we check for that anyway to be safe.
+            if (
+                not entry.name
+                or entry.name in (".", "..")
+                or "/" in entry.name
+                or "\\" in entry.name
+            ):
+                get_logger().warning(
+                    "Skipping suspicious directory entry name "
+                    f"{entry.name!r} returned while listing "
+                    f"{self.provider._safe_to_print_url(query)}"
+                )
+                continue
+
+            child_query = self._url_with_new_path(
+                str(url), url.path.rstrip("/") + "/" + entry.name
+            )
+            if (
+                entry.statinfo is not None
+                and entry.statinfo.flags & StatInfoFlags.IS_DIR
+            ):
+                yield from self._list_recursive(child_query, _depth + 1)
+            else:
+                yield child_query

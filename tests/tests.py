@@ -4,12 +4,16 @@ from pathlib import Path
 from typing import Optional, Type
 
 import pytest
+from snakemake.exceptions import WorkflowError
 from snakemake_interface_common.logging import get_logger
 from snakemake_interface_storage_plugins.tests import TestStorageBase
 from snakemake_interface_storage_plugins.storage_provider import StorageProviderBase
 from snakemake_interface_storage_plugins.settings import StorageProviderSettingsBase
 
-from snakemake_storage_plugin_xrootd import StorageProvider, StorageProviderSettings
+from snakemake_storage_plugin_xrootd import (
+    StorageProvider,
+    StorageProviderSettings,
+)
 import socket
 
 XROOTD_TEST_PORT = 32293
@@ -141,3 +145,46 @@ def test_safe_print_redacts_protocol_query_param():
     query = provider.postprocess_query("root://host//test.txt")
 
     assert provider.safe_print(query) == "root://host:1094//test.txt?****"
+
+
+def test_list_candidate_matches_recursive(start_xrootd_server, tmp_path):
+    provider = make_provider(
+        StorageProviderSettings(host="localhost", port=start_xrootd_server)
+    )
+
+    base = tmp_path / "glob_test"
+    (base / "sub").mkdir(parents=True)
+    (base / "a.txt").write_text("a")
+    (base / "b.txt").write_text("b")
+    (base / "sub" / "c.txt").write_text("c")
+
+    query = f"root://localhost:{start_xrootd_server}/{base}/{{name}}.txt"
+    obj = provider.object(query=query, keep_local=False, retrieve=False)
+
+    matches = list(obj.list_candidate_matches())
+
+    assert any(m.endswith("/a.txt") for m in matches)
+    assert any(m.endswith("/b.txt") for m in matches)
+    assert any(m.endswith("/sub/c.txt") for m in matches)
+    assert len(matches) == 3
+
+
+def test_list_candidate_matches_respects_depth_limit(start_xrootd_server, tmp_path):
+    provider = make_provider(
+        StorageProviderSettings(
+            host="localhost", port=start_xrootd_server, glob_wildcards_max_depth=2
+        )
+    )
+
+    # Build a directory chain deeper than the configured max depth.
+    deep = tmp_path
+    for i in range(5):
+        deep = deep / f"d{i}"
+    deep.mkdir(parents=True)
+    (deep / "leaf.txt").write_text("leaf")
+
+    query = f"root://localhost:{start_xrootd_server}/{tmp_path}/{{name}}.txt"
+    obj = provider.object(query=query, keep_local=False, retrieve=False)
+
+    with pytest.raises(WorkflowError):
+        list(obj.list_candidate_matches())
